@@ -64,6 +64,7 @@ export interface Diagnostic {
     | 'unreadable-file'
     | 'unknown-snapshot-version'
     | 'pg-parser-unavailable'
+    | 'pg-statements-unparsed'
     | 'baseline-stale';
   message: string;
   migration?: string;

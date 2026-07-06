@@ -60,12 +60,16 @@ test('engine emits pg-parser-unavailable and degrades when the parser will not l
   assert.match(active[0]!.message, /regex-degraded mode/);
 });
 
-test('engine tolerates a parser that throws on a malformed file (no crash)', async () => {
+test('engine surfaces pg-statements-unparsed when a migration will not parse (no silent skip)', async () => {
   const throwingParser = async () => () => {
     throw new Error('unparseable SQL');
   };
   const result = await lint(pgSet('CREATE INDEX "i" ON "users" ("e");'), { loadParser: throwingParser });
-  // AST rules produced nothing (parse failed) but the run completed cleanly
+  // the statement layer produced nothing (parse failed) — but the skip is
+  // reported, not silent, so a partly-unchecked migration never reads as clean
   assert.equal(result.findings.length, 0);
-  assert.equal(result.diagnostics.length, 0);
+  const diag = result.diagnostics.find((d) => d.code === 'pg-statements-unparsed');
+  assert.ok(diag, 'expected a pg-statements-unparsed diagnostic');
+  assert.ok(diag!.migration, 'diagnostic should be scoped to the migration');
+  assert.match(diag!.message, /statement-level rules were skipped/);
 });

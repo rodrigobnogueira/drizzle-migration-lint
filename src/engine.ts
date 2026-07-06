@@ -59,12 +59,25 @@ export function computeNewTables(migration: Migration): Set<string> {
   return harvestCreatedTables(migration.statements);
 }
 
-/** Parses a migration's SQL, tolerating a hand-edited file the real parser
- * rejects (skip the AST layer for that file rather than crash the run). */
-function parsePgStatements(parse: PgParseFn, migration: Migration): PgStatement[] {
+/** Parses a migration's SQL, tolerating a file the real parser rejects: skip
+ * the statement layer for it rather than crash the run — but surface a
+ * diagnostic so a silently-unchecked migration never reads as "clean". */
+function parsePgStatements(
+  parse: PgParseFn,
+  migration: Migration,
+  diagnostics: Diagnostic[],
+): PgStatement[] {
   try {
     return extractPgStatements(parse, migration.sql);
   } catch {
+    diagnostics.push({
+      code: 'pg-statements-unparsed',
+      message:
+        `${migration.sqlPath}: the Postgres parser could not read this migration, so its ` +
+        'statement-level rules were skipped (structural rules still ran). This usually means ' +
+        'hand-edited SQL or syntax newer than the bundled parser.',
+      migration: migration.id,
+    });
     return [];
   }
 }
@@ -123,6 +136,7 @@ function lintMigration(
   migration: Migration,
   pgParse: PgParseFn | null,
   degraded: boolean,
+  diagnostics: Diagnostic[],
 ): Finding[] {
   const newTables = computeNewTables(migration);
   const context: RuleContext = {
@@ -130,7 +144,7 @@ function lintMigration(
     migration,
     newTables,
     diffOps: diffMigration(migration),
-    pgStatements: pgParse ? parsePgStatements(pgParse, migration) : [],
+    pgStatements: pgParse ? parsePgStatements(pgParse, migration, diagnostics) : [],
   };
   const findings: Finding[] = [];
   for (const rule of RULES) {
@@ -163,7 +177,7 @@ export async function lint(set: MigrationSet, options: LintOptions = {}): Promis
   for (const migration of set.migrations) {
     // out-of-scope migrations are skipped, but their snapshots still anchor successors
     if (!options.inScope || options.inScope(migration.id)) {
-      findings.push(...lintMigration(set, migration, pgParse, degraded));
+      findings.push(...lintMigration(set, migration, pgParse, degraded, diagnostics));
     }
   }
   const finalFindings = applySeverityOverrides(findings, options.severityOverrides);
