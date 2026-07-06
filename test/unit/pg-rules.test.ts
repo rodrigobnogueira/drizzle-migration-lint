@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addCheckWithoutNotValid } from '../../src/rules/pg/add-check-without-not-valid';
 import { addColumnNotNullNoDefault } from '../../src/rules/pg/add-column-not-null-no-default';
+import { addEnumValue } from '../../src/rules/pg/add-enum-value';
 import { addFkWithoutNotValid } from '../../src/rules/pg/add-fk-without-not-valid';
 import { addPrimaryKeyOnExistingTable } from '../../src/rules/pg/add-primary-key-on-existing-table';
+import { addUniqueConstraint } from '../../src/rules/pg/add-unique-constraint';
 import { alterColumnType } from '../../src/rules/pg/alter-column-type';
 import { createIndexNonConcurrently } from '../../src/rules/pg/create-index-non-concurrently';
 import { setNotNull } from '../../src/rules/pg/set-not-null';
@@ -117,6 +119,31 @@ test('add-primary-key flags, skips USING INDEX and new tables, and ignores VALID
   assert.equal((await run(addPrimaryKeyOnExistingTable, 'ALTER TABLE "t" VALIDATE CONSTRAINT "f";')).length, 0);
 });
 
+// ---------- add-unique-constraint ----------
+
+test('add-unique-constraint flags, skips USING INDEX and new tables, ignores non-unique', async () => {
+  assert.equal((await run(addUniqueConstraint, 'ALTER TABLE "t" ADD CONSTRAINT "u" UNIQUE ("c");')).length, 1);
+  assert.equal((await run(addUniqueConstraint, 'ALTER TABLE "t" ADD CONSTRAINT "u" UNIQUE USING INDEX "idx";')).length, 0);
+  assert.equal((await run(addUniqueConstraint, 'ALTER TABLE "t" ADD CONSTRAINT "u" UNIQUE ("c");', { newTables: ['t'] })).length, 0);
+  assert.equal((await run(addUniqueConstraint, 'ALTER TABLE "t" ADD CONSTRAINT "p" PRIMARY KEY ("id");')).length, 0);
+});
+
+// ---------- add-enum-value ----------
+
+test('add-enum-value warns on ADD VALUE (schema-qualified too), not on RENAME VALUE', async () => {
+  const bare = await run(addEnumValue, `ALTER TYPE "status" ADD VALUE 'banned';`);
+  assert.equal(bare.length, 1);
+  assert.equal(bare[0]!.severity, 'warn');
+  assert.match(bare[0]!.message, /enum "status"/);
+
+  const qualified = await run(addEnumValue, `ALTER TYPE "auth"."status" ADD VALUE 'x' BEFORE 'y';`);
+  assert.equal(qualified.length, 1);
+  assert.match(qualified[0]!.message, /enum "auth\.status"/);
+
+  assert.equal((await run(addEnumValue, `ALTER TYPE "status" RENAME VALUE 'a' TO 'b';`)).length, 0);
+  assert.equal((await run(addEnumValue, 'ALTER TABLE "t" ADD COLUMN "c" int;')).length, 0);
+});
+
 // ---------- volatile-default ----------
 
 test('volatile-default flags volatile functions and softly flags unknown ones', async () => {
@@ -140,13 +167,13 @@ test('volatile-default is silent for stable and constant defaults, and new table
 
 /** Builds a context from a hand-crafted AST node, to exercise the `?? fallback`
  * guards for fields (relation, cmd name) that real drizzle output always sets. */
-function syntheticContext(node: Record<string, unknown>): RuleContext {
+function syntheticContext(node: Record<string, unknown>, kind = 'AlterTableStmt'): RuleContext {
   const migration: Migration = {
     id: 'm', index: 1, sqlPath: 'm.sql', sql: '', statements: [],
     snapshot: null, prevSnapshot: null, isFirst: false,
   };
   const set: MigrationSet = { format: 'v1', dialect: 'postgresql', dir: '/x', migrations: [migration], diagnostics: [] };
-  return { set, migration, newTables: new Set(), diffOps: [], pgStatements: [{ kind: 'AlterTableStmt', node, line: 1 }] };
+  return { set, migration, newTables: new Set(), diffOps: [], pgStatements: [{ kind, node, line: 1 }] };
 }
 
 test('rules tolerate an AlterTableStmt with no relation, an empty cmd, and a nameless column', () => {
@@ -178,6 +205,18 @@ test('add-column and set-not-null fall back to generic names for a nameless colu
     syntheticContext({ cmds: [{ AlterTableCmd: { subtype: 'AT_AddColumn', def: { ColumnDef: { constraints: [{ Constraint: { contype: 'CONSTR_DEFAULT', raw_expr: { FuncCall: { funcname: [{ String: { sval: 'gen_random_uuid' } }] } } } }] } } } }] }),
   );
   assert.match(volFindings[0]!.message, /the new column/);
+});
+
+test('add-enum-value tolerates a missing/degenerate typeName', () => {
+  // no typeName at all → empty identity, still flagged
+  const noName = addEnumValue.check(syntheticContext({ newVal: 'x' }, 'AlterEnumStmt'));
+  assert.equal(noName.length, 1);
+  assert.match(noName[0]!.message, /enum ""/);
+  // a segment with no String.sval is dropped; the remaining one names the enum
+  const partial = addEnumValue.check(
+    syntheticContext({ typeName: [{}, { String: { sval: 'e' } }], newVal: 'x' }, 'AlterEnumStmt'),
+  );
+  assert.match(partial[0]!.message, /enum "e"/);
 });
 
 test('add-constraint rules skip an AT_AddConstraint command carrying no constraint', () => {

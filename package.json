@@ -1,6 +1,6 @@
 {
   "name": "drizzle-migration-lint",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Catch drizzle-kit migrations that will lock or rewrite your production tables",
   "license": "MIT",
   "author": "Rodrigo Nogueira",

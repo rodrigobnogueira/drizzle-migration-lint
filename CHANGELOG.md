@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-07-06
+
+- New Postgres rules: `add-unique-constraint` (a `UNIQUE` constraint builds its
+  index under `ACCESS EXCLUSIVE` — error; use `CREATE UNIQUE INDEX CONCURRENTLY`
+  + `ADD CONSTRAINT ... USING INDEX`) and `add-enum-value` (`ALTER TYPE ... ADD
+  VALUE` is restricted inside drizzle's per-migration transaction — warn).
+- `--format sarif`: SARIF 2.1.0 output for GitHub code scanning
+  (`github/codeql-action/upload-sarif`).
+- `explain <rule-id>` command: prints a rule's rationale and safe alternative.
+- A reusable GitHub composite Action —
+  `uses: rodrigobnogueira/drizzle-migration-lint@v0.2.0`.
+
 ## 0.1.1 — 2026-07-06
 
 - Emit a `pg-statements-unparsed` diagnostic (scoped to the migration) when the

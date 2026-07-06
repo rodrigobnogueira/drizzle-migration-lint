@@ -4,6 +4,7 @@ import { runBaseline } from './baseline';
 import { loadConfig, resolveLocation, type DmlConfig } from './config';
 import { lint } from './engine';
 import { UsageError } from './errors';
+import { explainRule } from './explain';
 import { EXIT_CLEAN, EXIT_USAGE, computeExitCode, type FailOn } from './exit-code';
 import { readMigrationSet } from './formats';
 import { REPORTERS, defaultReporter, isReporterName, type ReporterName } from './reporters';
@@ -23,10 +24,12 @@ const USAGE = `drizzle-migration-lint — catch drizzle-kit migrations that will
 Usage:
   drizzle-migration-lint [check] [options]
   drizzle-migration-lint baseline [options]
+  drizzle-migration-lint explain <rule-id>
 
 Commands:
-  check      lint migrations (default)
-  baseline   record the latest migration as reviewed, so later runs lint only newer ones
+  check              lint migrations (default)
+  baseline           record the latest migration as reviewed, so later runs lint only newer ones
+  explain <rule-id>  print the rationale and safe alternative for a rule
 
 Options:
   --dir <path>       migrations directory (default: config/drizzle.config out, else ./drizzle)
@@ -34,7 +37,7 @@ Options:
   --since <git-ref>  lint only migrations added since a git ref (PR/CI mode)
   --all              lint the entire history, ignoring any configured baseline
   --config <path>    path to .drizzle-migration-lint.json
-  --format <name>    pretty | json | github (default: github under $GITHUB_ACTIONS, else pretty)
+  --format <name>    pretty | json | github | sarif (default: github under $GITHUB_ACTIONS, else pretty)
   --fail-on <level>  error | warn | none (default: error)
   -h, --help         show this help
   -v, --version      print the version
@@ -42,7 +45,9 @@ Options:
 Exit codes: 0 clean (or below --fail-on), 1 findings, 2 usage/environment error.`;
 
 interface ParsedCli {
-  command: 'check' | 'baseline';
+  command: 'check' | 'baseline' | 'explain';
+  /** the rule id for `explain`, else undefined */
+  rule: string | undefined;
   dir: string | undefined;
   dialect: Dialect | undefined;
   since: string | undefined;
@@ -59,7 +64,7 @@ function parseFormat(value: string | undefined): ReporterName | undefined {
     return undefined;
   }
   if (!isReporterName(value)) {
-    throw new UsageError(`unknown --format "${value}" (expected: pretty | json | github)`);
+    throw new UsageError(`unknown --format "${value}" (expected: pretty | json | github | sarif)`);
   }
   return value;
 }
@@ -105,11 +110,18 @@ function parseCliArgs(argv: string[]): ParsedCli {
   }
   const { values, positionals } = parsed;
   const command = positionals[0] ?? 'check';
-  if ((command !== 'check' && command !== 'baseline') || positionals.length > 1) {
-    throw new UsageError(`unknown command "${positionals.join(' ')}" — expected "check" or "baseline"`);
+  if (command === 'explain') {
+    if (positionals.length > 2) {
+      throw new UsageError('usage: drizzle-migration-lint explain <rule-id>');
+    }
+  } else if ((command !== 'check' && command !== 'baseline') || positionals.length > 1) {
+    throw new UsageError(
+      `unknown command "${positionals.join(' ')}" — expected "check", "baseline", or "explain"`,
+    );
   }
   return {
     command,
+    rule: positionals[1],
     dir: values.dir,
     dialect: parseDialect(values.dialect),
     since: values.since,
@@ -171,6 +183,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     return EXIT_CLEAN;
   }
   try {
+    if (cli.command === 'explain') {
+      io.stdout(explainRule(cli.rule));
+      return EXIT_CLEAN;
+    }
     const { config } = loadConfig(io.cwd, cli.config);
     return cli.command === 'baseline'
       ? runBaselineCommand(io, cli, config)

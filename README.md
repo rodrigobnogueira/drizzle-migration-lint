@@ -42,19 +42,41 @@ It **complements** `drizzle-kit check`: `check` catches migrations that conflict
 ```sh
 npx drizzle-migration-lint check          # lints the dir from your drizzle.config (or ./drizzle)
 npx drizzle-migration-lint check --dir src/db/migrations
+npx drizzle-migration-lint explain create-index-non-concurrently   # rule rationale + safe fix
 ```
 
 Exit codes: `0` clean (or below `--fail-on` level), `1` findings, `2` usage/environment error.
 
 ## In CI
 
-Under GitHub Actions the output defaults to inline annotations plus a job-summary table. Lint only what a PR adds with `--since`:
+Use the GitHub Action — one step, inline PR annotations plus a job-summary table:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0            # --since needs history
+- uses: rodrigobnogueira/drizzle-migration-lint@v0.2.0
+  with:
+    since: origin/${{ github.base_ref }}   # lint only what the PR adds
+    fail-on: warn
+```
+
+Inputs: `dir`, `dialect`, `since`, `all`, `config`, `format` (default `github`), `fail-on` (default `error`), `version` (default `latest`). Or call it directly:
 
 ```yaml
 - run: npx drizzle-migration-lint check --since origin/${{ github.base_ref }} --fail-on warn
 ```
 
-`--since <git-ref>` reads the migration set at that ref and reports only migrations added since — so an unsafe migration merged long ago doesn't fail every new PR. A rewritten or squashed history fails safe (lints everything).
+`--since <git-ref>` reports only migrations added since the ref — so an unsafe migration merged long ago doesn't fail every new PR. A rewritten or squashed history fails safe (lints everything).
+
+For **GitHub code scanning**, emit SARIF and upload it:
+
+```yaml
+- run: npx drizzle-migration-lint check --all --format sarif > results.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+```
 
 ## Rules
 
@@ -67,7 +89,9 @@ Under GitHub Actions the output defaults to inline annotations plus a job-summar
 | `add-fk-without-not-valid` | postgres | error |
 | `add-check-without-not-valid` | postgres | error |
 | `add-primary-key-on-existing-table` | postgres | error |
+| `add-unique-constraint` | postgres | error |
 | `volatile-default-on-add-column` | postgres | error |
+| `add-enum-value` | postgres | warn |
 | `drop-column` | all | warn |
 | `drop-table` | all | warn |
 | `rename-column` | all | warn |

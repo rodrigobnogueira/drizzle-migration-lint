@@ -1,8 +1,10 @@
 import type { Dialect, Rule } from '../types';
 import { addCheckWithoutNotValid } from './pg/add-check-without-not-valid';
 import { addColumnNotNullNoDefault } from './pg/add-column-not-null-no-default';
+import { addEnumValue } from './pg/add-enum-value';
 import { addFkWithoutNotValid } from './pg/add-fk-without-not-valid';
 import { addPrimaryKeyOnExistingTable } from './pg/add-primary-key-on-existing-table';
+import { addUniqueConstraint } from './pg/add-unique-constraint';
 import { alterColumnType } from './pg/alter-column-type';
 import { createIndexNonConcurrently } from './pg/create-index-non-concurrently';
 import { setNotNull } from './pg/set-not-null';
@@ -23,7 +25,9 @@ export const RULES: readonly Rule[] = [
   addFkWithoutNotValid,
   addCheckWithoutNotValid,
   addPrimaryKeyOnExistingTable,
+  addUniqueConstraint,
   volatileDefaultOnAddColumn,
+  addEnumValue,
   dropColumn,
   dropTable,
   renameColumn,
