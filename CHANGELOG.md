@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Emit a `pg-statements-unparsed` diagnostic (scoped to the migration) when the
+  Postgres parser cannot read a migration's SQL, instead of silently skipping
+  its statement-level rules. A partly-unchecked migration no longer reads as
+  clean. Structural rules still run.
+
 ## 0.1.0 — 2026-07-06
 
 First release.
