@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build/typecheck (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+
+  test:
+    name: Tests + coverage (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      # everything is file-based: no database services anywhere in this repo
+      - run: npm run test:cov
+      - name: Coverage summary
+        if: matrix.node-version == '22'
+        run: |
+          node -e "
+          const fs = require('node:fs');
+          const s = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8')).total;
+          const rows = ['statements', 'branches', 'functions', 'lines']
+            .map((m) => '| ' + m + ' | ' + s[m].pct + '% |');
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            ['### Coverage', '', '| Metric | Value |', '| :--- | ---: |', ...rows, ''].join('\n'),
+          );
+          "
+
+  lint:
+    name: Lint + complexity gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run lint:complexity
+
+  drift-probe:
+    name: drizzle-kit drift probe (informational)
+    runs-on: ubuntu-latest
+    # NON-BLOCKING probe: regenerates the committed fixtures with the *newest*
+    # drizzle-kit dist-tags and fails if the artifact formats drifted from
+    # what the parsers were pinned against. Catches upstream format changes
+    # (e.g. a snapshot version bump) before users do.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ['latest', 'prerelease']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Regenerate fixtures against ${{ matrix.channel }} drizzle-kit
+        # 'latest' overrides the LEGACY pins, 'prerelease' the V1 pins: each
+        # dist-tag is probed against the parser for its own artifact format.
+        # When kit v1 reaches GA, 'latest' will start emitting v1 folders and
+        # the legacy fixtures will drift loudly — that is the re-pin signal.
+        run: |
+          if [ "${{ matrix.channel }}" = "prerelease" ]; then
+            export DML_KIT_V1_VERSION="$(npm view drizzle-kit@rc version 2>/dev/null || npm view drizzle-kit@beta version 2>/dev/null || true)"
+            export DML_ORM_V1_VERSION="$(npm view drizzle-orm@rc version 2>/dev/null || npm view drizzle-orm@beta version 2>/dev/null || true)"
+            if [ -z "$DML_KIT_V1_VERSION" ]; then
+              echo "No prerelease dist-tag resolves; skipping." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Probing v1 parser against drizzle-kit@$DML_KIT_V1_VERSION / drizzle-orm@$DML_ORM_V1_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          else
+            export DML_KIT_LEGACY_VERSION="$(npm view drizzle-kit version)"
+            export DML_ORM_LEGACY_VERSION="$(npm view drizzle-orm version)"
+            echo "Probing legacy parser against drizzle-kit@$DML_KIT_LEGACY_VERSION / drizzle-orm@$DML_ORM_LEGACY_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          npm run fixtures:regen
+      - name: Fail on fixture drift
+        run: |
+          if ! git diff --exit-code test/fixtures; then
+            echo "::warning::drizzle-kit ${{ matrix.channel }} generates different artifacts than the committed fixtures — parsers may need re-pinning."
+            {
+              echo "### Drift detected (${{ matrix.channel }})"
+              echo ""
+              echo '```'
+              git diff --stat test/fixtures
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "No drift against ${{ matrix.channel }}." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,11 @@
+# Belt-and-suspenders: package.json "files" already allowlists what ships.
+src/
+test/
+scripts/
+.github/
+*.tsbuildinfo
+stryker.config.mjs
+eslint*.mjs
+tsconfig*.json
+.stryker-tmp/
+coverage/

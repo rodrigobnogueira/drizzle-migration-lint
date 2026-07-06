@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+.stryker-tmp/
+*.tsbuildinfo
+stryker.log
+reports/

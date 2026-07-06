@@ -1,0 +1,5 @@
+{
+  "mode": "generated",
+  "dialect": "postgresql",
+  "steps": [{ "name": "init", "schema": "schema.step0.ts" }]
+}
