@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "add-column-not-null-no-default"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "add-column-not-null-no-default"
+      }
+    ]
+  }
+}

@@ -96,7 +96,7 @@ function packageVersion(): string {
   return manifest.version;
 }
 
-export function runCli(argv: string[], io: CliIo): number {
+export async function runCli(argv: string[], io: CliIo): Promise<number> {
   let cli: ParsedCli;
   try {
     cli = parseCliArgs(argv);
@@ -115,7 +115,7 @@ export function runCli(argv: string[], io: CliIo): number {
   try {
     const location = resolveLocation(io.cwd, cli.dir, cli.dialect);
     const set = readMigrationSet(location.dir, { dialect: location.dialect });
-    const result = lint(set);
+    const result = await lint(set);
     io.stdout(REPORTERS[cli.format](result));
     return computeExitCode(result, cli.failOn);
   } catch (error) {
@@ -133,11 +133,12 @@ export function runCli(argv: string[], io: CliIo): number {
 
 /* c8 ignore start -- the bin entry itself is exercised by the spawned e2e tests */
 if (require.main === module) {
-  const code = runCli(process.argv.slice(2), {
+  runCli(process.argv.slice(2), {
     stdout: (text) => process.stdout.write(`${text}\n`),
     stderr: (text) => process.stderr.write(`${text}\n`),
     cwd: process.cwd(),
+  }).then((code) => {
+    process.exitCode = code;
   });
-  process.exitCode = code;
 }
 /* c8 ignore stop */

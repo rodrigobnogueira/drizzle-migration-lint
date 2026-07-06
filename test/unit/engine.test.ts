@@ -52,9 +52,9 @@ function makeSet(migrations: Migration[], dialect: MigrationSet['dialect']): Mig
   return { format: 'v1', dialect, dir: '/x', migrations, diagnostics: [] };
 }
 
-test('lint runs dialect-applicable rules and counts findings', () => {
+test('lint runs dialect-applicable rules and counts findings', async () => {
   const m = migration({ sql: 'TRUNCATE "users";', id: 'mig-1', sqlPath: 'mig-1/migration.sql' });
-  const result = lint(makeSet([m], 'postgresql'));
+  const result = await lint(makeSet([m], 'postgresql'));
   assert.equal(result.findings.length, 1);
   assert.equal(result.findings[0]!.rule, 'truncate-in-migration');
   assert.equal(result.summary.warnings, 1);
@@ -63,16 +63,16 @@ test('lint runs dialect-applicable rules and counts findings', () => {
   assert.equal(result.summary.migrationsChecked, 1);
 });
 
-test('lint skips rules whose dialect does not match', () => {
+test('lint skips rules whose dialect does not match', async () => {
   const m = migration({ sql: 'TRUNCATE "users";' });
-  const result = lint(makeSet([m], 'sqlite'));
+  const result = await lint(makeSet([m], 'sqlite'));
   assert.equal(result.findings.length, 0);
 });
 
-test('findings are sorted by file, then line, then rule', () => {
+test('findings are sorted by file, then line, then rule', async () => {
   const first = migration({ sql: 'TRUNCATE "a";\nSELECT 1;--> statement-breakpoint\nTRUNCATE "b";', id: '1', sqlPath: 'a.sql' });
   const second = migration({ sql: 'TRUNCATE "c";', id: '2', sqlPath: 'b.sql', index: 1 });
-  const result = lint(makeSet([second, first], 'postgresql'));
+  const result = await lint(makeSet([second, first], 'postgresql'));
   assert.deepEqual(
     result.findings.map((f) => `${f.file}:${f.line}`),
     ['a.sql:1', 'a.sql:3', 'b.sql:1'],

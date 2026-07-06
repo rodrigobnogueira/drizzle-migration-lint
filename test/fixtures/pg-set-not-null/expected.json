@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "set-not-null"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "set-not-null"
+      }
+    ]
+  }
+}

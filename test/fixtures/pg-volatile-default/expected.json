@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "volatile-default-on-add-column"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "volatile-default-on-add-column"
+      }
+    ]
+  }
+}

@@ -41,9 +41,9 @@ for (const caseName of caseNames) {
     if (!expectedForFormat) {
       continue;
     }
-    test(`fixture ${caseName} [${format}]`, () => {
+    test(`fixture ${caseName} [${format}]`, async () => {
       const set = readMigrationSet(join(caseDir, format));
-      const result = lint(set);
+      const result = await lint(set);
       const expectedFindings: ExpectedFinding[] = expectedForFormat.findings;
       const first = expectedFindings[0];
       const comparedKeys = first

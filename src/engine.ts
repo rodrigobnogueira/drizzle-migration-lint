@@ -1,8 +1,21 @@
 import { diffMigration } from './differ';
 import { parseTableRef } from './identifiers';
+import { loadPgParser, type PgParseFn } from './pg/ast';
+import type { PgStatement } from './pg/nodes';
+import { extractPgStatements } from './pg/walk';
 import { RULES, ruleAppliesTo } from './rules';
+import { degradedPgScan } from './rules/pg/degraded';
 import { applySuppressions } from './suppressions';
-import type { Finding, LintResult, Migration, MigrationSet, SqlStatement } from './types';
+import type {
+  Diagnostic,
+  Finding,
+  LintResult,
+  LintSummary,
+  Migration,
+  MigrationSet,
+  RuleContext,
+  SqlStatement,
+} from './types';
 
 /** Reporting order: by file, then line within a file, then rule id so two
  * rules firing on the same statement have a stable order. */
@@ -44,14 +57,54 @@ export function computeNewTables(migration: Migration): Set<string> {
   return harvestCreatedTables(migration.statements);
 }
 
-export function lint(set: MigrationSet): LintResult {
+/** Parses a migration's SQL, tolerating a hand-edited file the real parser
+ * rejects (skip the AST layer for that file rather than crash the run). */
+function parsePgStatements(parse: PgParseFn, migration: Migration): PgStatement[] {
+  try {
+    return extractPgStatements(parse, migration.sql);
+  } catch {
+    return [];
+  }
+}
+
+function summarize(findings: Finding[], migrationsChecked: number): LintSummary {
+  const active = findings.filter((finding) => !finding.suppressed);
+  return {
+    errors: active.filter((finding) => finding.severity === 'error').length,
+    warnings: active.filter((finding) => finding.severity === 'warn').length,
+    suppressed: findings.length - active.length,
+    migrationsChecked,
+  };
+}
+
+export interface LintOptions {
+  /** Override the Postgres parser loader — the seam tests use to exercise the
+   * degraded and parse-error paths. Defaults to the real WASM loader. */
+  loadParser?: () => Promise<PgParseFn | null>;
+}
+
+export async function lint(set: MigrationSet, options: LintOptions = {}): Promise<LintResult> {
+  const loadParser = options.loadParser ?? loadPgParser;
+  const diagnostics: Diagnostic[] = [...set.diagnostics];
+  const pgParse = set.dialect === 'postgresql' ? await loadParser() : null;
+  const degraded = set.dialect === 'postgresql' && pgParse === null;
+  if (degraded) {
+    diagnostics.push({
+      code: 'pg-parser-unavailable',
+      message:
+        'the Postgres SQL parser could not be loaded; Postgres rules ran in a reduced regex-only mode',
+    });
+  }
+
   const findings: Finding[] = [];
   for (const migration of set.migrations) {
-    const context = {
+    const newTables = computeNewTables(migration);
+    const context: RuleContext = {
       set,
       migration,
-      newTables: computeNewTables(migration),
+      newTables,
       diffOps: diffMigration(migration),
+      pgStatements: pgParse ? parsePgStatements(pgParse, migration) : [],
     };
     const migrationFindings: Finding[] = [];
     for (const rule of RULES) {
@@ -59,20 +112,13 @@ export function lint(set: MigrationSet): LintResult {
         migrationFindings.push(...rule.check(context));
       }
     }
+    if (degraded) {
+      migrationFindings.push(...degradedPgScan(migration, newTables));
+    }
     // suppression directives are file-scoped, so resolve them per migration
     applySuppressions(migrationFindings, migration.sql, migration.statements);
     findings.push(...migrationFindings);
   }
   findings.sort(compareFindings);
-  const active = findings.filter((finding) => !finding.suppressed);
-  return {
-    findings,
-    diagnostics: set.diagnostics,
-    summary: {
-      errors: active.filter((finding) => finding.severity === 'error').length,
-      warnings: active.filter((finding) => finding.severity === 'warn').length,
-      suppressed: findings.length - active.length,
-      migrationsChecked: set.migrations.length,
-    },
-  };
+  return { findings, diagnostics, summary: summarize(findings, set.migrations.length) };
 }

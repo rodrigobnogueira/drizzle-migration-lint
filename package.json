@@ -57,5 +57,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   },
-  "packageManager": "npm@11.13.0"
+  "packageManager": "npm@11.13.0",
+  "dependencies": {
+    "libpg-query": "^17.7.3"
+  }
 }

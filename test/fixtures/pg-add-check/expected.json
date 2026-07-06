@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "add-check-without-not-valid"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "add-check-without-not-valid"
+      }
+    ]
+  }
+}

@@ -22,7 +22,7 @@ function contextFor(sql: string, newTables: string[] = []): RuleContext {
     migrations: [migration],
     diagnostics: [],
   };
-  return { set, migration, newTables: new Set(newTables), diffOps: [] };
+  return { set, migration, newTables: new Set(newTables), diffOps: [], pgStatements: [] };
 }
 
 test('flags plain TRUNCATE with the table named', () => {

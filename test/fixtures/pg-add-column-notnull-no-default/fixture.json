@@ -1,0 +1,14 @@
+{
+  "mode": "generated",
+  "dialect": "postgresql",
+  "steps": [
+    {
+      "name": "init",
+      "schema": "schema.step0.ts"
+    },
+    {
+      "name": "evolve",
+      "schema": "schema.step1.ts"
+    }
+  ]
+}

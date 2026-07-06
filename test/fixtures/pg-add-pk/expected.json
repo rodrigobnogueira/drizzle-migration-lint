@@ -1,0 +1,11 @@
+{
+  "legacy": {
+    "findings": [
+      { "rule": "add-primary-key-on-existing-table", "line": 1 },
+      { "rule": "set-not-null", "line": 2 }
+    ]
+  },
+  "v1": {
+    "findings": [{ "rule": "add-primary-key-on-existing-table", "line": 1 }]
+  }
+}

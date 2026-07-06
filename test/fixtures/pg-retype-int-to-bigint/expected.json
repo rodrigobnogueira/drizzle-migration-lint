@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "alter-column-type"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "alter-column-type"
+      }
+    ]
+  }
+}

@@ -71,7 +71,7 @@ export function makeSnapshot(
       identity,
       name,
       schema,
-      columns: new Map(cols.map((col) => [col, { name: col, notNull: false }] as const)),
+      columns: new Map(cols.map((col) => [col, { name: col, notNull: false, type: null }] as const)),
     });
   }
   return {

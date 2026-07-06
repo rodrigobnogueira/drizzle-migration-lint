@@ -1,6 +1,7 @@
 export { resolveLocation } from './config';
-export { compareFindings, computeNewTables, lint } from './engine';
+export { compareFindings, computeNewTables, lint, type LintOptions } from './engine';
 export { UsageError } from './errors';
+export { loadPgParser, type PgParseFn } from './pg/ast';
 export { EXIT_CLEAN, EXIT_FINDINGS, EXIT_USAGE, computeExitCode } from './exit-code';
 export type { FailOn } from './exit-code';
 export { detectFormat, readMigrationSet } from './formats';

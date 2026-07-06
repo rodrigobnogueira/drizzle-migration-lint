@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "add-fk-without-not-valid"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "add-fk-without-not-valid"
+      }
+    ]
+  }
+}

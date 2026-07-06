@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "create-index-non-concurrently"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "create-index-non-concurrently"
+      }
+    ]
+  }
+}

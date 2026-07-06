@@ -1,3 +1,5 @@
+import type { PgStatement } from './pg/nodes';
+
 /** Dialects as they appear in drizzle-kit artifacts, normalized: the v1
  * snapshot literal `postgres` is mapped to `postgresql` on read. */
 export type Dialect =
@@ -60,7 +62,8 @@ export interface Diagnostic {
     | 'snapshot-chain-broken'
     | 'parallel-branches'
     | 'unreadable-file'
-    | 'unknown-snapshot-version';
+    | 'unknown-snapshot-version'
+    | 'pg-parser-unavailable';
   message: string;
   migration?: string;
 }
@@ -68,6 +71,10 @@ export interface Diagnostic {
 export interface NormalizedColumn {
   name: string;
   notNull: boolean;
+  /** Raw type string as recorded in the snapshot (`bigint`, `varchar(255)`),
+   * or null when the artifact omitted it. Used as the FROM type for
+   * alter-column-type widening analysis. */
+  type: string | null;
 }
 
 export interface NormalizedTable {
@@ -155,6 +162,9 @@ export interface RuleContext {
   /** Structural diff of this migration (prev → next snapshot, renames
    * resolved); empty when there is no snapshot pair to diff. */
   diffOps: DiffOp[];
+  /** Parsed Postgres statements for this migration; empty for non-pg dialects
+   * and when the parser is unavailable (degraded mode). */
+  pgStatements: PgStatement[];
 }
 
 export interface Rule {

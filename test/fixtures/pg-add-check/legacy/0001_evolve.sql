@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD CONSTRAINT "age_positive" CHECK ("users"."age" > 0);

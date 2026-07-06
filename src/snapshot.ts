@@ -61,7 +61,11 @@ function legacyColumns(tableValue: Record<string, unknown>): Map<string, Normali
   if (isRecord(tableValue.columns)) {
     for (const value of Object.values(tableValue.columns)) {
       if (isRecord(value) && typeof value.name === 'string') {
-        columns.set(value.name, { name: value.name, notNull: value.notNull === true });
+        columns.set(value.name, {
+          name: value.name,
+          notNull: value.notNull === true,
+          type: typeof value.type === 'string' ? value.type : null,
+        });
       }
     }
   }
@@ -131,7 +135,11 @@ function attachV1Columns(ddl: readonly unknown[], tables: Map<string, Normalized
     if (isRecord(entity) && entity.entityType === 'columns' && typeof entity.name === 'string' && typeof entity.table === 'string') {
       const schema = typeof entity.schema === 'string' ? entity.schema : null;
       const table = tables.get(tableIdentity(schema, entity.table));
-      table?.columns.set(entity.name, { name: entity.name, notNull: entity.notNull === true });
+      table?.columns.set(entity.name, {
+        name: entity.name,
+        notNull: entity.notNull === true,
+        type: typeof entity.type === 'string' ? entity.type : null,
+      });
     }
   }
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "s" SET DATA TYPE varchar(20) USING "s"::varchar(20);

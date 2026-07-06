@@ -1,14 +1,29 @@
 import type { Dialect, Rule } from '../types';
+import { addCheckWithoutNotValid } from './pg/add-check-without-not-valid';
+import { addColumnNotNullNoDefault } from './pg/add-column-not-null-no-default';
+import { addFkWithoutNotValid } from './pg/add-fk-without-not-valid';
+import { addPrimaryKeyOnExistingTable } from './pg/add-primary-key-on-existing-table';
+import { alterColumnType } from './pg/alter-column-type';
+import { createIndexNonConcurrently } from './pg/create-index-non-concurrently';
+import { setNotNull } from './pg/set-not-null';
+import { volatileDefaultOnAddColumn } from './pg/volatile-default-on-add-column';
 import { dropColumn } from './universal/drop-column';
 import { dropTable } from './universal/drop-table';
 import { renameColumn } from './universal/rename-column';
 import { renameTable } from './universal/rename-table';
 import { truncateInMigration } from './universal/truncate-in-migration';
 
-/** The catalog grows through M3 (pg statement-layer rules); findings are
- * re-sorted by file/line/rule in the engine, so registration order does not
- * affect output. */
+/** Findings are re-sorted by file/line/rule in the engine, so registration
+ * order does not affect output. */
 export const RULES: readonly Rule[] = [
+  createIndexNonConcurrently,
+  addColumnNotNullNoDefault,
+  setNotNull,
+  alterColumnType,
+  addFkWithoutNotValid,
+  addCheckWithoutNotValid,
+  addPrimaryKeyOnExistingTable,
+  volatileDefaultOnAddColumn,
   dropColumn,
   dropTable,
   renameColumn,

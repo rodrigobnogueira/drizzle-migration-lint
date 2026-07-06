@@ -5,7 +5,7 @@ import { splitStatements } from '../../src/splitter';
 import type { Dialect, Finding, LintResult, Snapshot } from '../../src/types';
 import { makeSnapshot } from '../support/tmp';
 
-function lintOne(prev: Snapshot, next: Snapshot, sql: string, dialect: Dialect = 'postgresql'): LintResult {
+async function lintOne(prev: Snapshot, next: Snapshot, sql: string, dialect: Dialect = 'postgresql'): Promise<LintResult> {
   return lint({
     format: 'v1',
     dialect,
@@ -32,8 +32,8 @@ function one(result: LintResult, rule: string): Finding {
   return matches[0]!;
 }
 
-test('drop-table produces a warn finding with the rolling-deploy suggestion', () => {
-  const result = lintOne(
+test('drop-table produces a warn finding with the rolling-deploy suggestion', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id'], posts: ['id'] }),
     makeSnapshot('b', { users: ['id'] }, { prevIds: ['a'] }),
     'DROP TABLE "posts";',
@@ -46,8 +46,8 @@ test('drop-table produces a warn finding with the rolling-deploy suggestion', ()
   assert.equal(finding.line, 1);
 });
 
-test('drop-column produces a warn finding naming the column and table', () => {
-  const result = lintOne(
+test('drop-column produces a warn finding naming the column and table', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id', 'email'] }),
     makeSnapshot('b', { users: ['id'] }, { prevIds: ['a'] }),
     'ALTER TABLE "users" DROP COLUMN "email";',
@@ -57,8 +57,8 @@ test('drop-column produces a warn finding naming the column and table', () => {
   assert.match(finding.docsUrl, /#drop-column$/);
 });
 
-test('rename-table produces a warn finding with the view bridge hint', () => {
-  const result = lintOne(
+test('rename-table produces a warn finding with the view bridge hint', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id'] }),
     makeSnapshot('b', { accounts: ['id'] }, { prevIds: ['a'] }),
     'ALTER TABLE "users" RENAME TO "accounts";',
@@ -68,8 +68,8 @@ test('rename-table produces a warn finding with the view bridge hint', () => {
   assert.match(finding.suggestion, /updatable view named "users"/);
 });
 
-test('rename-column produces a warn finding', () => {
-  const result = lintOne(
+test('rename-column produces a warn finding', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id', 'full_name'] }),
     makeSnapshot('b', { users: ['id', 'display_name'] }, { prevIds: ['a'] }),
     'ALTER TABLE "users" RENAME COLUMN "full_name" TO "display_name";',
@@ -78,8 +78,8 @@ test('rename-column produces a warn finding', () => {
   assert.match(finding.message, /Renaming column "full_name" to "display_name" on "users"/);
 });
 
-test('structural rules fire on non-postgres dialects too (sqlite)', () => {
-  const result = lintOne(
+test('structural rules fire on non-postgres dialects too (sqlite)', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id'], posts: ['id'] }),
     makeSnapshot('b', { users: ['id'] }, { prevIds: ['a'] }),
     'DROP TABLE `posts`;',
@@ -88,8 +88,8 @@ test('structural rules fire on non-postgres dialects too (sqlite)', () => {
   assert.equal(one(result, 'drop-table').severity, 'warn');
 });
 
-test('a disable-next-statement directive suppresses the drop but keeps it counted', () => {
-  const result = lintOne(
+test('a disable-next-statement directive suppresses the drop but keeps it counted', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id', 'email'] }),
     makeSnapshot('b', { users: ['id'] }, { prevIds: ['a'] }),
     '-- drizzle-migration-lint:disable-next-statement drop-column intentional\n' +
@@ -101,8 +101,8 @@ test('a disable-next-statement directive suppresses the drop but keeps it counte
   assert.equal(result.summary.suppressed, 1);
 });
 
-test('a clean add-only migration yields no structural findings', () => {
-  const result = lintOne(
+test('a clean add-only migration yields no structural findings', async () => {
+  const result = await lintOne(
     makeSnapshot('a', { users: ['id'] }),
     makeSnapshot('b', { users: ['id', 'email'] }, { prevIds: ['a'] }),
     'ALTER TABLE "users" ADD COLUMN "email" text;',
