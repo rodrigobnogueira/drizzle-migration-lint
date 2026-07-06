@@ -65,7 +65,7 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm run lint
-      - run: npm run lint:complexity
+      - run: npm run complexity:check
 
   drift-probe:
     name: drizzle-kit drift probe (informational)
@@ -119,3 +119,84 @@ jobs:
             exit 1
           fi
           echo "No drift against ${{ matrix.channel }}." >> "$GITHUB_STEP_SUMMARY"
+
+  complexity-report:
+    name: Cognitive complexity report
+    runs-on: ubuntu-latest
+    # Reports the SonarJS cognitive-complexity of src/ and, on PRs, posts a
+    # sticky comment comparing against the base branch. The ≤15 threshold is
+    # enforced separately (and blocks) in the `lint` job — this job never fails.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm ci
+
+      - name: Restore base branch complexity
+        if: github.event_name == 'pull_request'
+        id: base-complexity
+        uses: actions/cache/restore@v6
+        with:
+          path: ci-data
+          key: complexity-data-${{ github.base_ref }}-
+          restore-keys: complexity-data-${{ github.base_ref }}-
+
+      - name: Extract base complexity
+        if: steps.base-complexity.outputs.cache-matched-key
+        run: cp ci-data/cognitive-complexity-summary.json base-cognitive-complexity-summary.json 2>/dev/null || true
+
+      - name: Generate complexity report
+        run: npm run complexity:report
+
+      - name: Generate base complexity fallback
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f base-cognitive-complexity-summary.json ]; then
+            exit 0
+          fi
+          BASE_DIR="$(mktemp -d)"
+          cleanup() {
+            git worktree remove --force "$BASE_DIR" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$BASE_DIR" "${{ github.event.pull_request.base.sha }}"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASE_DIR/node_modules"
+          # the base commit may predate this tooling — a missing script just
+          # means "no base to compare against", so never fail the job here
+          (
+            cd "$BASE_DIR"
+            node scripts/collect-cognitive-complexity.mjs \
+              --output "$GITHUB_WORKSPACE/base-cognitive-complexity-summary.json"
+          ) || true
+
+      - name: Get changed files
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'src/**/*.ts' | tee changed-files.txt
+
+      - name: Post complexity comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const report = require('./.github/scripts/complexity-report.js');
+            await report({ github, context, core });
+
+      - name: Cache complexity for base comparisons
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p ci-data
+          cp complexity/cognitive-complexity-summary.json ci-data/cognitive-complexity-summary.json
+
+      - if: github.event_name == 'push'
+        uses: actions/cache/save@v6
+        with:
+          path: ci-data
+          key: complexity-data-${{ github.ref_name }}-${{ github.sha }}

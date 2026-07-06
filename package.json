@@ -35,7 +35,8 @@
     "test": "TS_NODE_PROJECT=tsconfig.spec.json node --require ts-node/register --test test/unit/*.test.ts test/*.test.ts",
     "test:cov": "c8 --all --include \"src/**/*.ts\" --exclude \"src/types.ts\" --exclude \"src/index.ts\" --reporter text --reporter text-summary --reporter json-summary --reporter lcov --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test",
     "lint": "eslint --config eslint.config.mjs \"src/**/*.ts\" \"scripts/**/*.mjs\"",
-    "lint:complexity": "eslint --config eslint.complexity-check.config.mjs \"src/**/*.ts\"",
+    "complexity:check": "eslint --config eslint.complexity-check.config.mjs \"src/**/*.ts\"",
+    "complexity:report": "node scripts/collect-cognitive-complexity.mjs",
     "fixtures:regen": "node scripts/fixtures-regen.mjs",
     "test:mutation": "stryker run",
     "test:mutant": "TS_NODE_PROJECT=tsconfig.spec.json node --require ts-node/register --test --test-force-exit test/unit/*.test.ts test/*.test.ts"

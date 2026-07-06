@@ -5,3 +5,7 @@ coverage/
 *.tsbuildinfo
 stryker.log
 reports/
+complexity/
+ci-data/
+base-cognitive-complexity-summary.json
+changed-files.txt
