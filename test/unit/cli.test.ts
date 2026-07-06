@@ -4,10 +4,13 @@ import { runCli, type CliIo } from '../../src/cli';
 import { EXIT_CLEAN, EXIT_FINDINGS, EXIT_USAGE } from '../../src/exit-code';
 import { ZERO, tempTree, v1SnapshotJson } from '../support/tmp';
 
-function capture(cwd = process.cwd()): { io: CliIo; out: string[]; err: string[] } {
+function capture(
+  cwd = process.cwd(),
+  env: NodeJS.ProcessEnv = {},
+): { io: CliIo; out: string[]; err: string[] } {
   const out: string[] = [];
   const err: string[] = [];
-  return { io: { stdout: (t) => out.push(t), stderr: (t) => err.push(t), cwd }, out, err };
+  return { io: { stdout: (t) => out.push(t), stderr: (t) => err.push(t), cwd, env }, out, err };
 }
 
 test('--help prints usage and exits clean', async () => {

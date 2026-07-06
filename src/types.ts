@@ -63,7 +63,8 @@ export interface Diagnostic {
     | 'parallel-branches'
     | 'unreadable-file'
     | 'unknown-snapshot-version'
-    | 'pg-parser-unavailable';
+    | 'pg-parser-unavailable'
+    | 'baseline-stale';
   message: string;
   migration?: string;
 }

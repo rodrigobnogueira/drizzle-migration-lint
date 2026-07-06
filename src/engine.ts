@@ -1,3 +1,4 @@
+import type { SeverityOverride } from './config';
 import { diffMigration } from './differ';
 import { parseTableRef } from './identifiers';
 import { loadPgParser, type PgParseFn } from './pg/ast';
@@ -14,6 +15,7 @@ import type {
   Migration,
   MigrationSet,
   RuleContext,
+  RuleId,
   SqlStatement,
 } from './types';
 
@@ -81,11 +83,72 @@ export interface LintOptions {
   /** Override the Postgres parser loader — the seam tests use to exercise the
    * degraded and parse-error paths. Defaults to the real WASM loader. */
   loadParser?: () => Promise<PgParseFn | null>;
+  /** Per-rule severity overrides from config; `off` drops the rule's findings
+   * entirely. */
+  severityOverrides?: Partial<Record<RuleId, SeverityOverride>>;
+  /** Restricts which migrations are linted (scoping). Out-of-scope migrations
+   * still serve as snapshot predecessors. Defaults to all in scope. */
+  inScope?: (migrationId: string) => boolean;
+  /** Extra diagnostics from scope resolution, surfaced in the result. */
+  extraDiagnostics?: Diagnostic[];
+}
+
+/** Applies config severity overrides: remaps a finding's severity, or drops it
+ * when the rule is set to `off`. */
+function applySeverityOverrides(
+  findings: Finding[],
+  overrides: Partial<Record<RuleId, SeverityOverride>> | undefined,
+): Finding[] {
+  if (!overrides) {
+    return findings;
+  }
+  const kept: Finding[] = [];
+  for (const finding of findings) {
+    const override = overrides[finding.rule];
+    if (override === 'off') {
+      continue;
+    }
+    if (override !== undefined) {
+      finding.severity = override;
+    }
+    kept.push(finding);
+  }
+  return kept;
+}
+
+/** Runs every applicable rule (plus degraded scan and suppressions) against a
+ * single migration. */
+function lintMigration(
+  set: MigrationSet,
+  migration: Migration,
+  pgParse: PgParseFn | null,
+  degraded: boolean,
+): Finding[] {
+  const newTables = computeNewTables(migration);
+  const context: RuleContext = {
+    set,
+    migration,
+    newTables,
+    diffOps: diffMigration(migration),
+    pgStatements: pgParse ? parsePgStatements(pgParse, migration) : [],
+  };
+  const findings: Finding[] = [];
+  for (const rule of RULES) {
+    if (ruleAppliesTo(rule, set.dialect)) {
+      findings.push(...rule.check(context));
+    }
+  }
+  if (degraded) {
+    findings.push(...degradedPgScan(migration, newTables));
+  }
+  // suppression directives are file-scoped, so resolve them per migration
+  applySuppressions(findings, migration.sql, migration.statements);
+  return findings;
 }
 
 export async function lint(set: MigrationSet, options: LintOptions = {}): Promise<LintResult> {
   const loadParser = options.loadParser ?? loadPgParser;
-  const diagnostics: Diagnostic[] = [...set.diagnostics];
+  const diagnostics: Diagnostic[] = [...set.diagnostics, ...(options.extraDiagnostics ?? [])];
   const pgParse = set.dialect === 'postgresql' ? await loadParser() : null;
   const degraded = set.dialect === 'postgresql' && pgParse === null;
   if (degraded) {
@@ -98,27 +161,16 @@ export async function lint(set: MigrationSet, options: LintOptions = {}): Promis
 
   const findings: Finding[] = [];
   for (const migration of set.migrations) {
-    const newTables = computeNewTables(migration);
-    const context: RuleContext = {
-      set,
-      migration,
-      newTables,
-      diffOps: diffMigration(migration),
-      pgStatements: pgParse ? parsePgStatements(pgParse, migration) : [],
-    };
-    const migrationFindings: Finding[] = [];
-    for (const rule of RULES) {
-      if (ruleAppliesTo(rule, set.dialect)) {
-        migrationFindings.push(...rule.check(context));
-      }
+    // out-of-scope migrations are skipped, but their snapshots still anchor successors
+    if (!options.inScope || options.inScope(migration.id)) {
+      findings.push(...lintMigration(set, migration, pgParse, degraded));
     }
-    if (degraded) {
-      migrationFindings.push(...degradedPgScan(migration, newTables));
-    }
-    // suppression directives are file-scoped, so resolve them per migration
-    applySuppressions(migrationFindings, migration.sql, migration.statements);
-    findings.push(...migrationFindings);
   }
-  findings.sort(compareFindings);
-  return { findings, diagnostics, summary: summarize(findings, set.migrations.length) };
+  const finalFindings = applySeverityOverrides(findings, options.severityOverrides);
+  finalFindings.sort(compareFindings);
+  return {
+    findings: finalFindings,
+    diagnostics,
+    summary: summarize(finalFindings, set.migrations.length),
+  };
 }

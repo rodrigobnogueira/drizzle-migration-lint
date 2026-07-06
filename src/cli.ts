@@ -1,30 +1,40 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { resolveLocation } from './config';
+import { runBaseline } from './baseline';
+import { loadConfig, resolveLocation, type DmlConfig } from './config';
 import { lint } from './engine';
 import { UsageError } from './errors';
 import { EXIT_CLEAN, EXIT_USAGE, computeExitCode, type FailOn } from './exit-code';
 import { readMigrationSet } from './formats';
-import { REPORTERS, isReporterName } from './reporters';
+import { REPORTERS, defaultReporter, isReporterName, type ReporterName } from './reporters';
+import { resolveScope } from './scope';
 import { normalizeDialect } from './snapshot';
-import type { Dialect } from './types';
+import type { Dialect, MigrationSet } from './types';
 
 export interface CliIo {
   stdout: (text: string) => void;
   stderr: (text: string) => void;
   cwd: string;
+  env: NodeJS.ProcessEnv;
 }
 
 const USAGE = `drizzle-migration-lint — catch drizzle-kit migrations that will lock or rewrite your production tables
 
 Usage:
   drizzle-migration-lint [check] [options]
+  drizzle-migration-lint baseline [options]
+
+Commands:
+  check      lint migrations (default)
+  baseline   record the latest migration as reviewed, so later runs lint only newer ones
 
 Options:
-  --dir <path>       migrations directory (default: out from drizzle.config.*, else ./drizzle)
+  --dir <path>       migrations directory (default: config/drizzle.config out, else ./drizzle)
   --dialect <name>   only needed when the artifacts don't say (postgresql|mysql|sqlite|turso|...)
-  --all              lint the entire migration history (currently always on)
-  --format <name>    pretty | json (default: pretty)
+  --since <git-ref>  lint only migrations added since a git ref (PR/CI mode)
+  --all              lint the entire history, ignoring any configured baseline
+  --config <path>    path to .drizzle-migration-lint.json
+  --format <name>    pretty | json | github (default: github under $GITHUB_ACTIONS, else pretty)
   --fail-on <level>  error | warn | none (default: error)
   -h, --help         show this help
   -v, --version      print the version
@@ -32,12 +42,44 @@ Options:
 Exit codes: 0 clean (or below --fail-on), 1 findings, 2 usage/environment error.`;
 
 interface ParsedCli {
+  command: 'check' | 'baseline';
   dir: string | undefined;
   dialect: Dialect | undefined;
-  format: 'pretty' | 'json';
+  since: string | undefined;
+  all: boolean;
+  config: string | undefined;
+  format: ReporterName | undefined;
   failOn: FailOn;
   help: boolean;
   version: boolean;
+}
+
+function parseFormat(value: string | undefined): ReporterName | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isReporterName(value)) {
+    throw new UsageError(`unknown --format "${value}" (expected: pretty | json | github)`);
+  }
+  return value;
+}
+
+function parseFailOn(value: string): FailOn {
+  if (value !== 'error' && value !== 'warn' && value !== 'none') {
+    throw new UsageError(`unknown --fail-on "${value}" (expected: error | warn | none)`);
+  }
+  return value;
+}
+
+function parseDialect(value: string | undefined): Dialect | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const dialect = normalizeDialect(value);
+  if (!dialect) {
+    throw new UsageError(`unknown --dialect "${value}"`);
+  }
+  return dialect;
 }
 
 function parseCliArgs(argv: string[]): ParsedCli {
@@ -49,8 +91,10 @@ function parseCliArgs(argv: string[]): ParsedCli {
       options: {
         dir: { type: 'string' },
         dialect: { type: 'string' },
+        since: { type: 'string' },
         all: { type: 'boolean' },
-        format: { type: 'string', default: 'pretty' },
+        config: { type: 'string' },
+        format: { type: 'string' },
         'fail-on': { type: 'string', default: 'error' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
@@ -61,29 +105,18 @@ function parseCliArgs(argv: string[]): ParsedCli {
   }
   const { values, positionals } = parsed;
   const command = positionals[0] ?? 'check';
-  if (command !== 'check' || positionals.length > 1) {
-    throw new UsageError(`unknown command "${positionals.join(' ')}" — only "check" is supported`);
-  }
-  const format = values.format as string;
-  if (!isReporterName(format)) {
-    throw new UsageError(`unknown --format "${format}" (expected: pretty | json)`);
-  }
-  const failOn = values['fail-on'] as string;
-  if (failOn !== 'error' && failOn !== 'warn' && failOn !== 'none') {
-    throw new UsageError(`unknown --fail-on "${failOn}" (expected: error | warn | none)`);
-  }
-  let dialect: Dialect | undefined;
-  if (values.dialect !== undefined) {
-    dialect = normalizeDialect(values.dialect) ?? undefined;
-    if (!dialect) {
-      throw new UsageError(`unknown --dialect "${values.dialect}"`);
-    }
+  if ((command !== 'check' && command !== 'baseline') || positionals.length > 1) {
+    throw new UsageError(`unknown command "${positionals.join(' ')}" — expected "check" or "baseline"`);
   }
   return {
+    command,
     dir: values.dir,
-    dialect,
-    format,
-    failOn,
+    dialect: parseDialect(values.dialect),
+    since: values.since,
+    all: values.all === true,
+    config: values.config,
+    format: parseFormat(values.format),
+    failOn: parseFailOn(values['fail-on'] as string),
     help: values.help === true,
     version: values.version === true,
   };
@@ -94,6 +127,31 @@ function packageVersion(): string {
 
   const manifest = require('../package.json') as { version: string };
   return manifest.version;
+}
+
+function loadSet(io: CliIo, cli: ParsedCli, config: DmlConfig): MigrationSet {
+  const location = resolveLocation(io.cwd, cli.dir, cli.dialect, config);
+  return readMigrationSet(location.dir, { dialect: location.dialect });
+}
+
+async function runCheck(io: CliIo, cli: ParsedCli, config: DmlConfig): Promise<number> {
+  const set = loadSet(io, cli, config);
+  const scope = resolveScope(set, { since: cli.since, all: cli.all, baseline: config.baseline });
+  const result = await lint(set, {
+    severityOverrides: config.rules,
+    inScope: scope.inScope,
+    extraDiagnostics: scope.diagnostics,
+  });
+  const format = cli.format ?? defaultReporter(io.env);
+  io.stdout(REPORTERS[format](result));
+  return computeExitCode(result, cli.failOn);
+}
+
+function runBaselineCommand(io: CliIo, cli: ParsedCli, config: DmlConfig): number {
+  const set = loadSet(io, cli, config);
+  const { tag, path } = runBaseline(io.cwd, set, cli.config);
+  io.stdout(`baseline set to "${tag}" in ${path}`);
+  return EXIT_CLEAN;
 }
 
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
@@ -113,11 +171,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     return EXIT_CLEAN;
   }
   try {
-    const location = resolveLocation(io.cwd, cli.dir, cli.dialect);
-    const set = readMigrationSet(location.dir, { dialect: location.dialect });
-    const result = await lint(set);
-    io.stdout(REPORTERS[cli.format](result));
-    return computeExitCode(result, cli.failOn);
+    const { config } = loadConfig(io.cwd, cli.config);
+    return cli.command === 'baseline'
+      ? runBaselineCommand(io, cli, config)
+      : await runCheck(io, cli, config);
   } catch (error) {
     if (error instanceof UsageError) {
       io.stderr(error.message);
@@ -137,6 +194,7 @@ if (require.main === module) {
     stdout: (text) => process.stdout.write(`${text}\n`),
     stderr: (text) => process.stderr.write(`${text}\n`),
     cwd: process.cwd(),
+    env: process.env,
   }).then((code) => {
     process.exitCode = code;
   });
