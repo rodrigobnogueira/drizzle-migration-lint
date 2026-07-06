@@ -161,3 +161,45 @@ test('--dialect is honored when snapshots lack one (all snapshots missing)', asy
     cleanup();
   }
 });
+
+test('explain prints a rule section and exits clean', async () => {
+  const { io, out } = capture();
+  assert.equal(await runCli(['explain', 'drop-column'], io), EXIT_CLEAN);
+  assert.match(out.join('\n'), /## drop-column/);
+});
+
+test('explain with an unknown rule exits 2', async () => {
+  const { io, err } = capture();
+  assert.equal(await runCli(['explain', 'nope'], io), EXIT_USAGE);
+  assert.match(err.join('\n'), /unknown rule/);
+});
+
+test('explain with no rule id exits 2', async () => {
+  const { io } = capture();
+  assert.equal(await runCli(['explain'], io), EXIT_USAGE);
+});
+
+test('explain with extra args exits 2', async () => {
+  const { io, err } = capture();
+  assert.equal(await runCli(['explain', 'drop-column', 'extra'], io), EXIT_USAGE);
+  assert.match(err.join('\n'), /explain <rule-id>/);
+});
+
+test('--format sarif emits SARIF 2.1.0', async () => {
+  const { dir, cleanup } = tempTree({
+    '20240101000000_init/migration.sql': 'CREATE TABLE "users" ("id" serial);',
+    '20240101000000_init/snapshot.json': v1SnapshotJson('id0', [ZERO], ['users']),
+    '20240102000000_wipe/migration.sql': 'TRUNCATE "users";',
+    '20240102000000_wipe/snapshot.json': v1SnapshotJson('id1', ['id0'], ['users']),
+  });
+  try {
+    const { io, out } = capture();
+    await runCli(['--dir', dir, '--format', 'sarif'], io);
+    const sarif = JSON.parse(out.join(''));
+    assert.equal(sarif.version, '2.1.0');
+    assert.equal(sarif.runs[0].tool.driver.name, 'drizzle-migration-lint');
+    assert.ok(sarif.runs[0].results.length >= 1);
+  } finally {
+    cleanup();
+  }
+});

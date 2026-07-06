@@ -61,6 +61,15 @@ export interface IndexStmt {
   whereClause?: PgExpr;
 }
 
+export interface AlterEnumStmt {
+  /** `[schema?, name]` string nodes identifying the enum type. */
+  typeName?: StringNode[];
+  /** present ⇔ the value being added or the new name in a RENAME VALUE */
+  newVal?: string;
+  /** present ⇔ RENAME VALUE <oldVal> TO <newVal> — absent for a plain ADD VALUE */
+  oldVal?: string;
+}
+
 export interface RawStmt {
   stmt: Record<string, unknown>;
   /** byte offset of the statement start; absent (⇒ 0) for the first one */

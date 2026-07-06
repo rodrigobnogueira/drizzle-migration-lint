@@ -1,23 +1,25 @@
 import { tableIdentity } from '../../identifiers';
 import type { AlterTableCmd, AlterTableStmt, Constraint, RangeVar } from '../../pg/nodes';
-import type { Finding, RuleContext, RuleId } from '../../types';
+import type { Finding, RuleContext, RuleId, Severity } from '../../types';
 import { docsUrlFor } from '../docs-url';
 
 export function pgTableIdentity(relation: RangeVar | undefined): string {
   return tableIdentity(relation?.schemaname ?? null, relation?.relname ?? '');
 }
 
-/** Every pg rule is an `error` on the current statement's line. */
+/** Builds a finding on the current statement's line. Defaults to `error` (the
+ * lock/rewrite rules); pass `warn` for advisory rules like add-enum-value. */
 export function pgFinding(
   ctx: RuleContext,
   id: RuleId,
   line: number,
   message: string,
   suggestion: string,
+  severity: Severity = 'error',
 ): Finding {
   return {
     rule: id,
-    severity: 'error',
+    severity,
     message,
     suggestion,
     file: ctx.migration.sqlPath,

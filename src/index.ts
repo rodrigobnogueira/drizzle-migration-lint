@@ -8,6 +8,7 @@ export {
 } from './config';
 export { compareFindings, computeNewTables, lint, type LintOptions } from './engine';
 export { UsageError } from './errors';
+export { explainRule } from './explain';
 export { loadPgParser, type PgParseFn } from './pg/ast';
 export { EXIT_CLEAN, EXIT_FINDINGS, EXIT_USAGE, computeExitCode } from './exit-code';
 export type { FailOn } from './exit-code';

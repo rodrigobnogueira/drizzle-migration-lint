@@ -1,0 +1,60 @@
+name: drizzle-migration-lint
+description: Catch drizzle-kit migrations that will lock or rewrite your production tables.
+author: Rodrigo Nogueira
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  dir:
+    description: Migrations directory (defaults to the out dir in drizzle.config, else ./drizzle).
+    required: false
+  dialect:
+    description: Dialect override (postgresql|mysql|sqlite|turso|...) — only when the artifacts don't say.
+    required: false
+  since:
+    description: Lint only migrations added since this git ref (e.g. origin/${{ github.base_ref }}) — PR mode.
+    required: false
+  all:
+    description: Lint the entire history, ignoring any configured baseline.
+    required: false
+    default: "false"
+  config:
+    description: Path to .drizzle-migration-lint.json.
+    required: false
+  format:
+    description: "Output format: github | pretty | json | sarif."
+    required: false
+    default: github
+  fail-on:
+    description: Fail the job on error | warn | none.
+    required: false
+    default: error
+  version:
+    description: Version of drizzle-migration-lint to run (npm dist-tag or exact version).
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    # `--since` needs history; remind users to checkout with fetch-depth: 0.
+    - shell: bash
+      env:
+        DML_DIR: ${{ inputs.dir }}
+        DML_DIALECT: ${{ inputs.dialect }}
+        DML_SINCE: ${{ inputs.since }}
+        DML_ALL: ${{ inputs.all }}
+        DML_CONFIG: ${{ inputs.config }}
+        DML_FORMAT: ${{ inputs.format }}
+        DML_FAIL_ON: ${{ inputs.fail-on }}
+        DML_VERSION: ${{ inputs.version }}
+      run: |
+        args=(check)
+        if [ -n "$DML_DIR" ]; then args+=(--dir "$DML_DIR"); fi
+        if [ -n "$DML_DIALECT" ]; then args+=(--dialect "$DML_DIALECT"); fi
+        if [ -n "$DML_SINCE" ]; then args+=(--since "$DML_SINCE"); fi
+        if [ "$DML_ALL" = "true" ]; then args+=(--all); fi
+        if [ -n "$DML_CONFIG" ]; then args+=(--config "$DML_CONFIG"); fi
+        args+=(--format "$DML_FORMAT" --fail-on "$DML_FAIL_ON")
+        npx --yes "drizzle-migration-lint@$DML_VERSION" "${args[@]}"

@@ -76,6 +76,14 @@ Severity defaults: `error` fails the run (exit 1) under the default `--fail-on e
 
 **Safe alternative:** `CREATE UNIQUE INDEX CONCURRENTLY` in its own out-of-transaction migration (see [create-index-non-concurrently](#create-index-non-concurrently)), then `ADD CONSTRAINT ... PRIMARY KEY USING INDEX <idx>` — instant.
 
+## add-unique-constraint
+
+**Flags:** `ADD CONSTRAINT ... UNIQUE (...)` on a pre-existing table, unless it attaches via `USING INDEX` (postgres, error).
+
+**Why:** the constraint builds its backing unique index inline, holding `ACCESS EXCLUSIVE` for the whole build — every read and write to the table blocks.
+
+**Safe alternative:** `CREATE UNIQUE INDEX CONCURRENTLY` in its own out-of-transaction migration (see [create-index-non-concurrently](#create-index-non-concurrently)), then `ADD CONSTRAINT ... UNIQUE USING INDEX <idx>` — which attaches instantly.
+
 ## volatile-default-on-add-column
 
 **Flags:** `ADD COLUMN ... DEFAULT <volatile-function>()` on a pre-existing table (postgres, error).
@@ -85,6 +93,16 @@ Severity defaults: `error` fails the run (exit 1) under the default `--fail-on e
 **Deliberate stance:** `now()` / `CURRENT_TIMESTAMP` are **STABLE, not volatile — they do not flag.** The folk rule that says otherwise predates PG 11. Unknown function names flag with a softened "cannot verify volatility" message.
 
 **Safe alternative:** add the column with no default (or a constant), set the volatile default afterwards (applies to new rows only), backfill existing rows in batches.
+
+## add-enum-value
+
+**Flags:** `ALTER TYPE ... ADD VALUE` (postgres, warn).
+
+**Why:** drizzle wraps each migration in a transaction, and `ADD VALUE` is restricted there — on PostgreSQL < 12 it cannot run inside a transaction at all (the migration fails), and on 12+ the newly added value cannot be used until the transaction commits, so any statement in the *same* migration that references the new value fails. drizzle-kit emits `ADD VALUE` only against a pre-existing enum. (This is a `warn`: a standalone `ADD VALUE` on PG 12+ is fine — the risk is version- and usage-dependent.)
+
+**Safe alternative:** put the `ADD VALUE` in its own migration, and don't use the new value (as a default, in an `UPDATE`, etc.) until a later one.
+
+> `RENAME VALUE` is not flagged. Removing an enum value is a different operation: drizzle rebuilds the column type, which surfaces as [alter-column-type](#alter-column-type).
 
 ## drop-column
 

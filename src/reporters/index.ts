@@ -2,13 +2,15 @@ import type { LintResult } from '../types';
 import { renderGithub } from './github';
 import { renderJson } from './json';
 import { renderPretty } from './pretty';
+import { renderSarif } from './sarif';
 
-export type ReporterName = 'pretty' | 'json' | 'github';
+export type ReporterName = 'pretty' | 'json' | 'github' | 'sarif';
 
 export const REPORTERS: Record<ReporterName, (result: LintResult) => string> = {
   pretty: (result) => renderPretty(result),
   json: renderJson,
   github: (result) => renderGithub(result),
+  sarif: renderSarif,
 };
 
 export function isReporterName(name: string): name is ReporterName {
