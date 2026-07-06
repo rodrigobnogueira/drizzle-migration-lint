@@ -5,7 +5,10 @@ import { splitStatements } from '../../src/splitter';
 import type { Finding, Migration, MigrationSet, Snapshot } from '../../src/types';
 
 function snapshot(id: string, tables: string[], prevIds: string[] = []): Snapshot {
-  return { id, prevIds, tables: new Set(tables) };
+  const map = new Map(
+    tables.map((t) => [t, { identity: t, name: t, schema: null, columns: new Map() }] as const),
+  );
+  return { id, prevIds, tables: map, renames: { tables: [], columns: [] } };
 }
 
 function migration(partial: Partial<Migration> & { sql: string }): Migration {

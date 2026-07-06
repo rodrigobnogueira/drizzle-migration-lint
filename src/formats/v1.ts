@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { UsageError } from '../errors';
 import { normalizeV1Snapshot, v1SnapshotDialect } from '../snapshot';
 import { splitStatements } from '../splitter';
-import type { Diagnostic, Dialect, Migration, MigrationSet, Snapshot } from '../types';
+import type { Diagnostic, Dialect, Migration, MigrationSet, NormalizedTable, Snapshot } from '../types';
 import { V1_FOLDER } from './detect';
 
 interface V1Folder {
@@ -99,13 +99,24 @@ function resolvePrev(
   if (parents.length === 1) {
     return parents[0] as Snapshot;
   }
-  const tables = new Set<string>();
+  // A table/column pre-existed if ANY parent had it — union the parents so the
+  // new-table exemption and column diffs stay conservative across a merge.
+  const tables = new Map<string, NormalizedTable>();
   for (const parent of parents) {
-    for (const table of parent.tables) {
-      tables.add(table);
+    for (const [identity, table] of parent.tables) {
+      const merged = tables.get(identity) ?? { ...table, columns: new Map(table.columns) };
+      for (const [colName, column] of table.columns) {
+        merged.columns.set(colName, column);
+      }
+      tables.set(identity, merged);
     }
   }
-  return { id: snapshot.prevIds.join('+'), prevIds: [], tables };
+  return {
+    id: snapshot.prevIds.join('+'),
+    prevIds: [],
+    tables,
+    renames: { tables: [], columns: [] },
+  };
 }
 
 function checkForParallelBranches(folders: V1Folder[], diagnostics: Diagnostic[]): void {

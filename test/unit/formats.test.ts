@@ -251,7 +251,45 @@ test('v1: merge commit (two parents) → prevSnapshot is the union of parent tab
   try {
     const set = readMigrationSet(dir);
     const merge = set.migrations.find((m) => m.id.endsWith('_merge'))!;
-    assert.deepEqual([...merge.prevSnapshot!.tables].sort(), ['posts', 'users']);
+    assert.deepEqual([...merge.prevSnapshot!.tables.keys()].sort(), ['posts', 'users']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('v1: merge unions parent columns for the surviving table', () => {
+  const withCol = (id: string, prev: string, table: string, col: string) =>
+    JSON.stringify({
+      version: '8',
+      dialect: 'postgres',
+      id,
+      prevIds: [prev],
+      ddl: [
+        { entityType: 'tables', name: table, schema: 'public' },
+        { entityType: 'columns', name: col, schema: 'public', table, notNull: false },
+      ],
+      renames: [],
+    });
+  const { dir, cleanup } = tempTree({
+    '20240101000000_a/migration.sql': 'SELECT 1;',
+    '20240101000000_a/snapshot.json': withCol('ida', ZERO, 'users', 'email'),
+    '20240102000000_b/migration.sql': 'SELECT 2;',
+    '20240102000000_b/snapshot.json': withCol('idb', ZERO, 'users', 'phone'),
+    '20240103000000_merge/migration.sql': 'SELECT 3;',
+    '20240103000000_merge/snapshot.json': JSON.stringify({
+      version: '8',
+      dialect: 'postgres',
+      id: 'idm',
+      prevIds: ['ida', 'idb'],
+      ddl: [{ entityType: 'tables', name: 'users', schema: 'public' }],
+      renames: [],
+    }),
+  });
+  try {
+    const set = readMigrationSet(dir);
+    const merge = set.migrations.find((m) => m.id.endsWith('_merge'))!;
+    const users = merge.prevSnapshot!.tables.get('users')!;
+    assert.deepEqual([...users.columns.keys()].sort(), ['email', 'phone']);
   } finally {
     cleanup();
   }

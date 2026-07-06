@@ -1,0 +1,4 @@
+{
+  "legacy": { "findings": [{ "rule": "drop-column" }] },
+  "v1": { "findings": [{ "rule": "drop-column" }] }
+}

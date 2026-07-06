@@ -1,5 +1,7 @@
+import { diffMigration } from './differ';
 import { parseTableRef } from './identifiers';
 import { RULES, ruleAppliesTo } from './rules';
+import { applySuppressions } from './suppressions';
 import type { Finding, LintResult, Migration, MigrationSet, SqlStatement } from './types';
 
 /** Reporting order: by file, then line within a file, then rule id so two
@@ -28,11 +30,11 @@ function harvestCreatedTables(statements: readonly SqlStatement[]): Set<string> 
 export function computeNewTables(migration: Migration): Set<string> {
   const { snapshot, prevSnapshot } = migration;
   if (snapshot && migration.isFirst) {
-    return new Set(snapshot.tables);
+    return new Set(snapshot.tables.keys());
   }
   if (snapshot && prevSnapshot) {
     const created = new Set<string>();
-    for (const table of snapshot.tables) {
+    for (const table of snapshot.tables.keys()) {
       if (!prevSnapshot.tables.has(table)) {
         created.add(table);
       }
@@ -45,12 +47,21 @@ export function computeNewTables(migration: Migration): Set<string> {
 export function lint(set: MigrationSet): LintResult {
   const findings: Finding[] = [];
   for (const migration of set.migrations) {
-    const context = { set, migration, newTables: computeNewTables(migration) };
+    const context = {
+      set,
+      migration,
+      newTables: computeNewTables(migration),
+      diffOps: diffMigration(migration),
+    };
+    const migrationFindings: Finding[] = [];
     for (const rule of RULES) {
       if (ruleAppliesTo(rule, set.dialect)) {
-        findings.push(...rule.check(context));
+        migrationFindings.push(...rule.check(context));
       }
     }
+    // suppression directives are file-scoped, so resolve them per migration
+    applySuppressions(migrationFindings, migration.sql, migration.statements);
+    findings.push(...migrationFindings);
   }
   findings.sort(compareFindings);
   const active = findings.filter((finding) => !finding.suppressed);

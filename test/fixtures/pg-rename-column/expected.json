@@ -1,0 +1,16 @@
+{
+  "legacy": {
+    "findings": [
+      {
+        "rule": "rename-column"
+      }
+    ]
+  },
+  "v1": {
+    "findings": [
+      {
+        "rule": "rename-column"
+      }
+    ]
+  }
+}

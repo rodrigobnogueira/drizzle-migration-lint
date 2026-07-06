@@ -37,6 +37,20 @@ test('empty and whitespace-only pieces are dropped', () => {
   assert.equal(trailing.length, 1);
 });
 
+test('leading comment lines are skipped; line points at the SQL', () => {
+  const sql =
+    '-- drizzle-migration-lint:disable-next-statement drop-column\nALTER TABLE "u" DROP COLUMN "c";';
+  const statements = splitStatements(sql);
+  assert.equal(statements.length, 1);
+  assert.match(statements[0]!.text, /^ALTER TABLE/);
+  assert.equal(statements[0]!.line, 2);
+});
+
+test('a chunk that is only a comment (no trailing newline) yields no statement', () => {
+  assert.deepEqual(splitStatements('-- just a comment'), []);
+  assert.deepEqual(splitStatements('-- a\n-- b'), []);
+});
+
 test('statements keep their line even after multi-line predecessors', () => {
   const sql = 'CREATE TABLE "a" (\n"x" int,\n"y" int\n);--> statement-breakpoint\n\n\nTRUNCATE "a";';
   const statements = splitStatements(sql);

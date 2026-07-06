@@ -60,6 +60,9 @@ for (const caseName of caseNames) {
           expectedForFormat.diagnostics,
         );
       }
+      if (expectedForFormat.suppressed !== undefined) {
+        assert.equal(result.summary.suppressed, expectedForFormat.suppressed);
+      }
     });
   }
 }

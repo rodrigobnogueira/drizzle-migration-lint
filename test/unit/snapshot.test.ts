@@ -28,7 +28,7 @@ test('legacy pg v7: identity comes from value schema+name, never record keys', (
     },
   });
   assert.ok(snapshot);
-  assert.deepEqual([...snapshot.tables].sort(), ['auth.sessions', 'users']);
+  assert.deepEqual([...snapshot.tables.keys()].sort(), ['auth.sessions', 'users']);
   assert.deepEqual(snapshot.prevIds, []); // zero sentinel filtered
 });
 
@@ -39,7 +39,7 @@ test('legacy sqlite v6: bare keys, no schema field', () => {
     tables: { users: { name: 'users' } },
   });
   assert.ok(snapshot);
-  assert.deepEqual([...snapshot.tables], ['users']);
+  assert.deepEqual([...snapshot.tables.keys()], ['users']);
   assert.deepEqual(snapshot.prevIds, ['a']);
 });
 
@@ -74,7 +74,7 @@ test('v1 pg v8: tables come from ddl entities with entityType "tables"', () => {
     renames: [],
   });
   assert.ok(snapshot);
-  assert.deepEqual([...snapshot.tables].sort(), ['auth.sessions', 'users']);
+  assert.deepEqual([...snapshot.tables.keys()].sort(), ['auth.sessions', 'users']);
   assert.deepEqual(snapshot.prevIds, []);
 });
 
@@ -87,7 +87,7 @@ test('v1 sqlite v7: table entities carry no schema field', () => {
     ddl: [{ entityType: 'tables', name: 'users' }],
   });
   assert.ok(snapshot);
-  assert.deepEqual([...snapshot.tables], ['users']);
+  assert.deepEqual([...snapshot.tables.keys()], ['users']);
   assert.deepEqual(snapshot.prevIds, ['c']); // non-string prevIds dropped
 });
 
@@ -104,4 +104,120 @@ test('v1SnapshotDialect reads and normalizes the dialect literal', () => {
   assert.equal(v1SnapshotDialect({ dialect: 'postgres' }), 'postgresql');
   assert.equal(v1SnapshotDialect({ dialect: 'nope' }), null);
   assert.equal(v1SnapshotDialect(null), null);
+});
+
+// ---------- column extraction ----------
+
+test('legacy tables carry their columns with notNull flags', () => {
+  const snapshot = normalizeLegacySnapshot({
+    id: 'x',
+    tables: {
+      'public.users': {
+        name: 'users',
+        schema: '',
+        columns: {
+          id: { name: 'id', notNull: true },
+          email: { name: 'email', notNull: false },
+          bad: { notNull: true },
+        },
+      },
+    },
+  });
+  const users = snapshot!.tables.get('users')!;
+  assert.deepEqual([...users.columns.keys()].sort(), ['email', 'id']);
+  assert.equal(users.columns.get('id')!.notNull, true);
+  assert.equal(users.columns.get('email')!.notNull, false);
+});
+
+test('v1 column entities are attached to their table; orphans are ignored', () => {
+  const snapshot = normalizeV1Snapshot({
+    id: 'x',
+    dialect: 'postgres',
+    prevIds: [ZERO_SNAPSHOT_ID],
+    ddl: [
+      { entityType: 'tables', name: 'users', schema: 'public' },
+      { entityType: 'columns', name: 'id', schema: 'public', table: 'users', notNull: true },
+      { entityType: 'columns', name: 'ghost', schema: 'public', table: 'missing', notNull: false },
+    ],
+  });
+  const users = snapshot!.tables.get('users')!;
+  assert.deepEqual([...users.columns.keys()], ['id']);
+  assert.equal(users.columns.get('id')!.notNull, true);
+});
+
+// ---------- v1 rename hints (string "from->to") ----------
+
+function v1Renames(renames: unknown[], ddl: unknown[] = [{ entityType: 'tables', name: 'accounts', schema: 'public' }]) {
+  return normalizeV1Snapshot({ id: 'x', dialect: 'postgres', prevIds: [ZERO_SNAPSHOT_ID], ddl, renames })!.renames;
+}
+
+test('v1 table rename hint (schema-qualified)', () => {
+  assert.deepEqual(v1Renames(['public.users->public.accounts']).tables, [
+    { from: 'users', to: 'accounts' },
+  ]);
+});
+
+test('v1 table rename hint (sqlite, bare names)', () => {
+  const renames = normalizeV1Snapshot({
+    id: 'x',
+    dialect: 'sqlite',
+    prevIds: [ZERO_SNAPSHOT_ID],
+    ddl: [{ entityType: 'tables', name: 'accounts' }],
+    renames: ['users->accounts'],
+  })!.renames;
+  assert.deepEqual(renames.tables, [{ from: 'users', to: 'accounts' }]);
+});
+
+test('v1 column rename hint is told apart by its parent table existing', () => {
+  const renames = v1Renames(
+    ['public.users.full_name->public.users.display_name'],
+    [
+      { entityType: 'tables', name: 'users', schema: 'public' },
+      { entityType: 'columns', name: 'display_name', schema: 'public', table: 'users', notNull: false },
+    ],
+  );
+  assert.deepEqual(renames.columns, [{ table: 'users', from: 'full_name', to: 'display_name' }]);
+  assert.deepEqual(renames.tables, []);
+});
+
+test('v1 rename hints skip non-strings and entries without an arrow', () => {
+  const renames = v1Renames([42, 'no-arrow-here', 'a->b']);
+  assert.deepEqual(renames.tables, [{ from: 'a', to: 'b' }]);
+  assert.deepEqual(renames.columns, []);
+});
+
+test('v1 empty renames array yields no hints', () => {
+  assert.deepEqual(v1Renames([]), { tables: [], columns: [] });
+});
+
+// ---------- legacy _meta rename hints (defensive; empty in practice) ----------
+
+test('legacy _meta rename hints are parsed (real quoted-identifier keys)', () => {
+  // observed drizzle-kit 0.31.10 sqlite _meta: keys/values are quoted SQL idents
+  const snapshot = normalizeLegacySnapshot({
+    id: 'x',
+    tables: {},
+    _meta: {
+      tables: { '"users"': '"accounts"', bad: 7 },
+      columns: { '"users"."full_name"': '"users"."display_name"' },
+    },
+  });
+  assert.deepEqual(snapshot!.renames.tables, [{ from: 'users', to: 'accounts' }]);
+  assert.deepEqual(snapshot!.renames.columns, [
+    { table: 'users', from: 'full_name', to: 'display_name' },
+  ]);
+});
+
+test('legacy without _meta yields no rename hints', () => {
+  const snapshot = normalizeLegacySnapshot({ id: 'x', tables: {} });
+  assert.deepEqual(snapshot!.renames, { tables: [], columns: [] });
+});
+
+test('legacy _meta column key without a dot degrades gracefully', () => {
+  const snapshot = normalizeLegacySnapshot({
+    id: 'x',
+    tables: {},
+    _meta: { columns: { loose: 'renamed' } },
+  });
+  assert.deepEqual(snapshot!.renames.columns, [{ table: '', from: 'loose', to: 'renamed' }]);
 });

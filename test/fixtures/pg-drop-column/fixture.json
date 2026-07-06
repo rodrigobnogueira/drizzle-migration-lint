@@ -1,0 +1,8 @@
+{
+  "mode": "generated",
+  "dialect": "postgresql",
+  "steps": [
+    { "name": "init", "schema": "schema.step0.ts" },
+    { "name": "drop_email", "schema": "schema.step1.ts" }
+  ]
+}

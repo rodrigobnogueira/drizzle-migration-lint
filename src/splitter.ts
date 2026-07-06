@@ -16,9 +16,32 @@ function lineAt(sql: string, index: number): number {
   return line;
 }
 
+/** Offset within `piece` of the first line that is neither blank nor a `--`
+ * line comment — i.e. where the SQL body actually begins. Leading comments
+ * (including suppression directives) are skipped so the anchored rule/differ
+ * regexes see real SQL, and `.line` points at the statement, not its comment. */
+function sqlBodyOffset(piece: string): number {
+  let offset = 0;
+  while (offset < piece.length) {
+    const newline = piece.indexOf('\n', offset);
+    const lineEnd = newline === -1 ? piece.length : newline;
+    const line = piece.slice(offset, lineEnd);
+    const trimmedStart = line.length - line.trimStart().length;
+    const content = line.trim();
+    if (content.length > 0 && !content.startsWith('--')) {
+      return offset + trimmedStart;
+    }
+    if (newline === -1) {
+      return piece.length;
+    }
+    offset = newline + 1;
+  }
+  return piece.length;
+}
+
 /** Splits a migration file into statements, keeping the 1-based line where
- * each statement starts. Files generated without breakpoints yield a single
- * statement. */
+ * each statement's SQL starts (leading blank/comment lines skipped). Files
+ * generated without breakpoints yield a single statement. */
 export function splitStatements(sql: string): SqlStatement[] {
   const statements: SqlStatement[] = [];
   let cursor = 0;
@@ -26,10 +49,10 @@ export function splitStatements(sql: string): SqlStatement[] {
     const tokenIndex = sql.indexOf(STATEMENT_BREAKPOINT, cursor);
     const end = tokenIndex === -1 ? sql.length : tokenIndex;
     const piece = sql.slice(cursor, end);
-    const text = piece.trim();
+    const bodyOffset = sqlBodyOffset(piece);
+    const text = piece.slice(bodyOffset).trim();
     if (text.length > 0) {
-      const leading = piece.length - piece.trimStart().length;
-      statements.push({ text, line: lineAt(sql, cursor + leading) });
+      statements.push({ text, line: lineAt(sql, cursor + bodyOffset) });
     }
     if (tokenIndex === -1) {
       return statements;

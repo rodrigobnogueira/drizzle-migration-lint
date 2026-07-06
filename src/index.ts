@@ -8,4 +8,5 @@ export { REPORTERS, isReporterName } from './reporters';
 export { RULES } from './rules';
 export { normalizeDialect } from './snapshot';
 export { STATEMENT_BREAKPOINT, splitStatements } from './splitter';
+export { applySuppressions, parseDirectives } from './suppressions';
 export type * from './types';

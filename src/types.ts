@@ -65,16 +65,64 @@ export interface Diagnostic {
   migration?: string;
 }
 
+export interface NormalizedColumn {
+  name: string;
+  notNull: boolean;
+}
+
+export interface NormalizedTable {
+  /** `table` or `schema.table` for non-default pg schemas. */
+  identity: string;
+  name: string;
+  schema: string | null;
+  columns: Map<string, NormalizedColumn>;
+}
+
+export interface RenamePair {
+  from: string;
+  to: string;
+}
+
+export interface ColumnRenamePair {
+  table: string;
+  from: string;
+  to: string;
+}
+
+/** Rename hints drizzle-kit records for the transition INTO this snapshot
+ * (legacy `_meta`, v1 `renames[]`). SQL `RENAME` statements are the
+ * authoritative signal; these corroborate — and cover sqlite's
+ * table-recreate dance, where the SQL carries no clean `RENAME`. */
+export interface RenameHints {
+  tables: RenamePair[];
+  columns: ColumnRenamePair[];
+}
+
 /** Normalized snapshot: only what the engine needs, one shape for every
- * artifact format and dialect. `tables` holds normalized identities
- * (`table` or `schema.table` for non-default pg schemas). */
+ * artifact format and dialect. */
 export interface Snapshot {
   id: string;
   /** Legacy snapshots have exactly one predecessor (`prevId`); v1 snapshots
    * may have several (DAG). */
   prevIds: string[];
-  tables: Set<string>;
+  tables: Map<string, NormalizedTable>;
+  renames: RenameHints;
 }
+
+/** Semantic operations the structural differ emits for one migration, after
+ * resolving renames. Table-level ops (`drop-table`, `rename-table`) concern
+ * tables that existed before this migration by construction; column ops carry
+ * the containing table's identity. */
+export type DiffOpBody =
+  | { kind: 'drop-table'; table: string }
+  | { kind: 'rename-table'; from: string; to: string }
+  | { kind: 'drop-column'; table: string; column: string }
+  | { kind: 'rename-column'; table: string; from: string; to: string };
+
+/** A `DiffOpBody` plus the 1-based source line of the driving SQL statement,
+ * or 1 when the operation is visible only in the snapshot diff (e.g. sqlite's
+ * table-recreate dance). */
+export type DiffOp = DiffOpBody & { line: number };
 
 export interface Migration {
   /** Stable id: legacy journal tag (`0001_lush_hulk`) or v1 folder name. */
@@ -104,6 +152,9 @@ export interface RuleContext {
   migration: Migration;
   /** Tables created by this migration — every operation on them is exempt. */
   newTables: Set<string>;
+  /** Structural diff of this migration (prev → next snapshot, renames
+   * resolved); empty when there is no snapshot pair to diff. */
+  diffOps: DiffOp[];
 }
 
 export interface Rule {

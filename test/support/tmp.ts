@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import type { NormalizedTable, RenameHints, Snapshot } from '../../src/types';
 
 /** Creates a throwaway directory populated from a `path → content` map and
  * returns it with a cleanup function. */
@@ -47,3 +48,36 @@ export function journalJson(dialect: string, tags: string[]): string {
 }
 
 export const ZERO = '00000000-0000-0000-0000-000000000000';
+
+function splitIdentity(identity: string): { schema: string | null; name: string } {
+  const dot = identity.lastIndexOf('.');
+  return dot === -1
+    ? { schema: null, name: identity }
+    : { schema: identity.slice(0, dot), name: identity.slice(dot + 1) };
+}
+
+/** Builds a normalized Snapshot object directly (not raw JSON): `tables` maps
+ * a table identity to its column names. Columns default to nullable — the
+ * structural rules only care about presence. */
+export function makeSnapshot(
+  id: string,
+  tables: Record<string, string[]>,
+  opts: { prevIds?: string[]; renames?: RenameHints } = {},
+): Snapshot {
+  const map = new Map<string, NormalizedTable>();
+  for (const [identity, cols] of Object.entries(tables)) {
+    const { schema, name } = splitIdentity(identity);
+    map.set(identity, {
+      identity,
+      name,
+      schema,
+      columns: new Map(cols.map((col) => [col, { name: col, notNull: false }] as const)),
+    });
+  }
+  return {
+    id,
+    prevIds: opts.prevIds ?? [],
+    tables: map,
+    renames: opts.renames ?? { tables: [], columns: [] },
+  };
+}
