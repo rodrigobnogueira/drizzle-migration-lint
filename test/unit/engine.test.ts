@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compareFindings, computeNewTables, lint } from '../../src/engine';
+import {
+  DEFAULT_SIZE_THRESHOLD,
+  applySizeExemptions,
+  compareFindings,
+  computeNewTables,
+  lint,
+} from '../../src/engine';
 import { splitStatements } from '../../src/splitter';
 import type { Finding, Migration, MigrationSet, Snapshot } from '../../src/types';
 
@@ -89,4 +95,60 @@ test('compareFindings orders by file, then line, then rule id', () => {
   // same file + line → rule id breaks the tie
   assert.ok(compareFindings(f('a.sql', 3, 'add-fk'), f('a.sql', 3, 'set-not-null')) < 0);
   assert.equal(compareFindings(f('a.sql', 3, 'r'), f('a.sql', 3, 'r')), 0);
+});
+
+// ---------- size-exemption ----------
+
+function sizeFinding(over: Partial<Finding>): Finding {
+  return {
+    rule: 'create-index-non-concurrently',
+    severity: 'error',
+    message: 'm',
+    suggestion: 's',
+    file: 'f.sql',
+    line: 1,
+    migration: 'x',
+    suppressed: false,
+    table: 'users',
+    docsUrl: 'd',
+    ...over,
+  };
+}
+
+test('size-exemption suppresses a size-sensitive finding on a small table', () => {
+  const findings = [sizeFinding({})];
+  applySizeExemptions(findings, new Map([['users', 1000]]), DEFAULT_SIZE_THRESHOLD);
+  assert.equal(findings[0]!.suppressed, true);
+  assert.match(findings[0]!.message, /the lock is brief/);
+});
+
+test('size-exemption keeps a finding on a table above the threshold', () => {
+  const findings = [sizeFinding({})];
+  applySizeExemptions(findings, new Map([['users', 999_999_999]]), DEFAULT_SIZE_THRESHOLD);
+  assert.equal(findings[0]!.suppressed, false);
+});
+
+test('size-exemption keeps a finding on a table not in the size map', () => {
+  const findings = [sizeFinding({})];
+  applySizeExemptions(findings, new Map(), 10);
+  assert.equal(findings[0]!.suppressed, false);
+});
+
+test('size-exemption skips non-size-sensitive, tableless, and already-suppressed findings', () => {
+  const notSensitive = sizeFinding({ rule: 'add-enum-value' });
+  const tableless = sizeFinding({ table: undefined });
+  const already = sizeFinding({ suppressed: true, message: 'kept' });
+  applySizeExemptions([notSensitive, tableless, already], new Map([['users', 1]]), 10);
+  assert.equal(notSensitive.suppressed, false);
+  assert.equal(tableless.suppressed, false);
+  assert.equal(already.message, 'kept'); // untouched
+});
+
+test('lint threads tableSizes through to size-exemption', async () => {
+  const m = migration({ sql: 'CREATE INDEX "i" ON "users" ("x");' });
+  const result = await lint(makeSet([m], 'postgresql'), { tableSizes: new Map([['users', 1000]]) });
+  const finding = result.findings.find((f) => f.rule === 'create-index-non-concurrently')!;
+  assert.equal(finding.suppressed, true);
+  assert.equal(result.summary.suppressed, 1);
+  assert.equal(result.summary.errors, 0);
 });

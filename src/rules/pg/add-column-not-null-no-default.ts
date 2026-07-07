@@ -28,6 +28,7 @@ export const addColumnNotNullNoDefault: Rule = {
             line,
             `Adding NOT NULL column "${column}" to "${table}" without a default fails on any non-empty table.`,
             SUGGESTION,
+            { table },
           ),
         );
       }

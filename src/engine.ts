@@ -1,10 +1,11 @@
+import { formatBytes } from './bytes';
 import type { SeverityOverride } from './config';
 import { diffMigration } from './differ';
 import { parseTableRef } from './identifiers';
 import { loadPgParser, type PgParseFn } from './pg/ast';
 import type { PgStatement } from './pg/nodes';
 import { extractPgStatements } from './pg/walk';
-import { RULES, ruleAppliesTo } from './rules';
+import { RULES, SIZE_SENSITIVE_RULES, ruleAppliesTo } from './rules';
 import { degradedPgScan } from './rules/pg/degraded';
 import { applySuppressions } from './suppressions';
 import type {
@@ -104,6 +105,40 @@ export interface LintOptions {
   inScope?: (migrationId: string) => boolean;
   /** Extra diagnostics from scope resolution, surfaced in the result. */
   extraDiagnostics?: Diagnostic[];
+  /** Live on-disk table sizes (bytes). When set, lock/rewrite findings on
+   * tables at or below `sizeThreshold` are suppressed as low-risk. */
+  tableSizes?: Map<string, number>;
+  /** Byte threshold for `tableSizes` exemption (default 16 MiB). */
+  sizeThreshold?: number;
+}
+
+/** Default size-exemption threshold: 16 MiB. A lock or rewrite on a table this
+ * small completes in well under a second. */
+export const DEFAULT_SIZE_THRESHOLD = 16 * 1024 * 1024;
+
+/** Suppresses lock/rewrite findings on tables at or below the size threshold —
+ * the lock is too brief to matter. Findings stay visible (suppressed count)
+ * with the size noted; only truly size-sensitive rules are eligible. */
+export function applySizeExemptions(
+  findings: Finding[],
+  sizes: Map<string, number>,
+  threshold: number,
+): void {
+  for (const finding of findings) {
+    if (finding.suppressed) {
+      continue;
+    }
+    if (!SIZE_SENSITIVE_RULES.has(finding.rule) || finding.table === undefined) {
+      continue;
+    }
+    const bytes = sizes.get(finding.table);
+    if (bytes !== undefined && bytes <= threshold) {
+      finding.suppressed = true;
+      finding.message +=
+        ` (table "${finding.table}" is ${formatBytes(bytes)}, at or below the ` +
+        `${formatBytes(threshold)} threshold — the lock is brief.)`;
+    }
+  }
 }
 
 /** Applies config severity overrides: remaps a finding's severity, or drops it
@@ -181,6 +216,9 @@ export async function lint(set: MigrationSet, options: LintOptions = {}): Promis
     }
   }
   const finalFindings = applySeverityOverrides(findings, options.severityOverrides);
+  if (options.tableSizes) {
+    applySizeExemptions(finalFindings, options.tableSizes, options.sizeThreshold ?? DEFAULT_SIZE_THRESHOLD);
+  }
   finalFindings.sort(compareFindings);
   return {
     findings: finalFindings,

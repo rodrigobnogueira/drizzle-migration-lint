@@ -13,6 +13,9 @@ export interface DmlConfig {
    * it unless --since/--all is given. */
   baseline?: { tag: string };
   rules?: Partial<Record<RuleId, SeverityOverride>>;
+  /** Opt-in live Postgres introspection: suppress lock/rewrite findings on
+   * tables at or below `threshold` (bytes, or "16MB"/"1GB"). Off by default. */
+  introspect?: { url?: string; threshold?: string | number };
 }
 
 export const CONFIG_BASENAME = '.drizzle-migration-lint.json';

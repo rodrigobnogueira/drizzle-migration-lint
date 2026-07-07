@@ -108,11 +108,13 @@ Optional `.drizzle-migration-lint.json`:
 {
   "dir": "src/db/migrations",
   "baseline": { "tag": "0042_last_reviewed" },
-  "rules": { "truncate-in-migration": "off", "drop-column": "error" }
+  "rules": { "truncate-in-migration": "off", "drop-column": "error" },
+  "introspect": { "url": "postgresql://…", "threshold": "16MB" }
 }
 ```
 
 - `rules` overrides any rule's severity, or turns it `off`.
+- `introspect` opts into live table-size awareness (see below); omit it to stay fully offline.
 - `baseline` (written by `drizzle-migration-lint baseline`) marks a migration as reviewed; later `check` runs skip everything up to and including it. Useful when adopting the tool on an existing project — baseline the current tip, then only new migrations are linted. `--all` overrides it.
 
 ## Suppressions
@@ -124,12 +126,26 @@ CREATE INDEX "users_email_idx" ON "users" ("email");
 
 `disable-file <rule-id>[,<rule-id>] [reason]` is also available. Suppressed findings stay visible in the summary counts.
 
+## Table-size awareness (opt-in)
+
+A lock or rewrite is only slow on a big table. Point the linter at a live Postgres and it will suppress lock/rewrite findings on tables at or below a size threshold — the lock is too brief to matter — so you only see the ones worth acting on:
+
+```sh
+npx drizzle-migration-lint check --db-url "$DATABASE_URL" --size-threshold 16MB
+```
+
+- **Opt-in and off by default** — without `--db-url` the tool never connects to anything.
+- **Read-only:** one `SELECT` of `pg_total_relation_size` per table. It never writes, and never runs your migrations.
+- Requires the `pg` package (an optional peer): `npm i pg`. If it can't connect, linting continues and a diagnostic notes that size-exemption was skipped.
+- Only the eight **lock/rewrite** Postgres rules are eligible. Data-loss and rolling-deploy findings (drops, renames, truncate, `NOT NULL` without default) are never size-exempted — a small table doesn't make those safe.
+- Suppressed findings stay visible (with the table's size noted). Configure via `introspect` in the config file, or `--size-threshold` (default `16MB`).
+
 ## Non-goals
 
 - **Not a query linter.** For `.where()`/`.delete()` safety, see `eslint-plugin-drizzle`.
-- **Never executes anything.** It reads generated files only — it does not run your migrations, import your `drizzle.config` (that's scanned with regexes), or connect to a database.
+- **Never runs your migrations or executes your config** (`drizzle.config` is scanned with regexes, never imported). The default is fully offline; the *only* time it touches a database is the opt-in, read-only `--db-url` size query above.
 - **No auto-rewrite.** Every finding tells you the safe recipe; applying it stays a human decision.
-- **No runtime hooks** and no live-database introspection (table sizes, etc.) in v0.1.
+- **No runtime hooks.**
 
 ## License
 

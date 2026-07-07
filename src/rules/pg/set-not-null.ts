@@ -23,6 +23,7 @@ export const setNotNull: Rule = {
           line,
           `SET NOT NULL on "${table}"."${column}" takes ACCESS EXCLUSIVE and scans the whole table while everything waits.`,
           SUGGESTION,
+          { table },
         ),
       );
     }

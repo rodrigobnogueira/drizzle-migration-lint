@@ -9,8 +9,10 @@ message. It is the missing "strong_migrations for Drizzle".
 
 Two properties define it, and every decision must protect them:
 
-1. **Trustworthy.** It is READ-ONLY — it never runs a migration, imports a
-   user's config, or connects to a database. A linter that people disable
+1. **Trustworthy.** It is READ-ONLY and offline by default — it never runs a
+   migration or imports a user's config. The *sole* exception is opt-in
+   `--db-url` table-size introspection: a single read-only `SELECT` the user
+   must explicitly enable, never touched otherwise. A linter that people disable
    because it is noisy or dangerous is worse than no linter. Low false-positive
    rate is a feature, not a nicety.
 2. **Drizzle-aware.** It reads drizzle-kit's **snapshots**, so it works from
@@ -57,7 +59,9 @@ non-adversarial. Never imply affiliation with the Drizzle team.
   `npm run fixtures:regen && git diff --exit-code test/fixtures` must be clean.
   Hand-edited fixtures are marked `"mode": "handmade"` and skipped by regen.
 - **Never execute user code.** `drizzle.config.*` is regex-scanned, never
-  imported (no jiti/ts-node). No database connection. Ever.
+  imported (no jiti/ts-node). No database connection by default — the only
+  exception is opt-in `--db-url` size introspection (read-only, one query, `pg`
+  as an optional peer). It must never write, run migrations, or connect unasked.
 
 ## 3. Rule design
 
@@ -106,10 +110,11 @@ non-adversarial. Never imply affiliation with the Drizzle team.
 ## 6. Non-goals (keep them honest in the README)
 
 - Not a query linter (that is `eslint-plugin-drizzle`'s job).
-- Never executes migrations, config, or a database.
+- Never executes migrations or config, and never connects to a database unless
+  you opt in with `--db-url` (read-only size introspection).
 - No auto-rewrite — every finding gives the safe recipe; applying it stays a
   human decision.
-- No runtime hooks and no live-database introspection (table sizes, etc.).
+- No runtime hooks. Live table-size introspection exists but is strictly opt-in.
 
 ## 7. Testing discipline
 

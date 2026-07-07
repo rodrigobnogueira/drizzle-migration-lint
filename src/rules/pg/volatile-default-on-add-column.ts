@@ -36,7 +36,7 @@ export const volatileDefaultOnAddColumn: Rule = {
         continue;
       }
       const column = cmd.def?.ColumnDef?.colname ?? 'the new column';
-      findings.push(pgFinding(ctx, this.id, line, message(table, column, verdict), SUGGESTION));
+      findings.push(pgFinding(ctx, this.id, line, message(table, column, verdict), SUGGESTION, { table }));
     }
     return findings;
   },

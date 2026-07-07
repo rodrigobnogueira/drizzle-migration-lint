@@ -57,6 +57,7 @@ export const alterColumnType: Rule = {
           line,
           `Changing the type of "${table}"."${column}" rewrites the whole table under ACCESS EXCLUSIVE.${note}`,
           SUGGESTION,
+          { table },
         ),
       );
     }

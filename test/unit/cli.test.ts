@@ -203,3 +203,65 @@ test('--format sarif emits SARIF 2.1.0', async () => {
     cleanup();
   }
 });
+
+test('--db-url on postgres records introspection-failed when it cannot connect', async () => {
+  const { dir, cleanup } = tempTree({
+    '20240101000000_init/migration.sql': 'CREATE TABLE "users" ("id" serial);',
+    '20240101000000_init/snapshot.json': v1SnapshotJson('id0', [ZERO], ['users']),
+    '20240102000000_wipe/migration.sql': 'TRUNCATE "users";',
+    '20240102000000_wipe/snapshot.json': v1SnapshotJson('id1', ['id0'], ['users']),
+  });
+  try {
+    const { io, out } = capture();
+    await runCli(['--dir', dir, '--db-url', 'postgresql://u:p@127.0.0.1:1/x', '--format', 'json'], io);
+    const parsed = JSON.parse(out.join(''));
+    assert.ok(parsed.diagnostics.some((d: { code: string }) => d.code === 'introspection-failed'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('--size-threshold with a bad value is a usage error', async () => {
+  const { dir, cleanup } = tempTree({
+    '20240101000000_init/migration.sql': 'CREATE TABLE "users" ("id" serial);',
+    '20240101000000_init/snapshot.json': v1SnapshotJson('id0', [ZERO], ['users']),
+  });
+  try {
+    const { io, err } = capture();
+    assert.equal(await runCli(['--dir', dir, '--size-threshold', 'huge'], io), EXIT_USAGE);
+    assert.match(err.join('\n'), /invalid size/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('--db-url is ignored for non-postgres dialects (no introspection attempt)', async () => {
+  const { dir, cleanup } = tempTree({
+    '20240101000000_init/migration.sql': 'CREATE TABLE `users` (`id` integer);',
+    '20240101000000_init/snapshot.json': v1SnapshotJson('id0', [ZERO], ['users'], 'sqlite'),
+  });
+  try {
+    const { io, out } = capture();
+    await runCli(['--dir', dir, '--db-url', 'postgresql://u:p@127.0.0.1:1/x', '--format', 'json'], io);
+    const parsed = JSON.parse(out.join(''));
+    assert.ok(!parsed.diagnostics.some((d: { code: string }) => d.code === 'introspection-failed'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('introspect url + threshold from the config file are used', async () => {
+  const { dir, cleanup } = tempTree({
+    '.drizzle-migration-lint.json': JSON.stringify({ introspect: { url: 'postgresql://u:p@127.0.0.1:1/x', threshold: '8MB' } }),
+    'm/20240101000000_init/migration.sql': 'CREATE TABLE "users" ("id" serial);',
+    'm/20240101000000_init/snapshot.json': v1SnapshotJson('id0', [ZERO], ['users']),
+  });
+  try {
+    const { io, out } = capture(dir);
+    await runCli(['--dir', `${dir}/m`, '--format', 'json'], io);
+    const parsed = JSON.parse(out.join(''));
+    assert.ok(parsed.diagnostics.some((d: { code: string }) => d.code === 'introspection-failed'));
+  } finally {
+    cleanup();
+  }
+});

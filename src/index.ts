@@ -6,7 +6,15 @@ export {
   type DmlConfig,
   type SeverityOverride,
 } from './config';
-export { compareFindings, computeNewTables, lint, type LintOptions } from './engine';
+export { formatBytes, parseSize } from './bytes';
+export {
+  DEFAULT_SIZE_THRESHOLD,
+  compareFindings,
+  computeNewTables,
+  lint,
+  type LintOptions,
+} from './engine';
+export { introspectTableSizes, type IntrospectResult, type PgConnector } from './introspect';
 export { UsageError } from './errors';
 export { explainRule } from './explain';
 export { loadPgParser, type PgParseFn } from './pg/ast';

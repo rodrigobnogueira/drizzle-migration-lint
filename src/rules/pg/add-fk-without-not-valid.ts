@@ -25,6 +25,7 @@ export const addFkWithoutNotValid: Rule = {
           line,
           `Adding a foreign key to "${table}" without NOT VALID scans and locks both tables during validation.`,
           SUGGESTION,
+          { table },
         ),
       );
     }
