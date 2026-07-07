@@ -53,6 +53,7 @@ export function snapshotWithColumns(
           columns: new Map(
             Object.entries(columns).map(([name, type]) => [name, { name, notNull: false, type }]),
           ),
+          foreignKeys: new Map(),
         },
       ],
     ]),

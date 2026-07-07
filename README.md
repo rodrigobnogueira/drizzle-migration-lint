@@ -96,6 +96,7 @@ For **GitHub code scanning**, emit SARIF and upload it:
 | `drop-table` | all | warn |
 | `rename-column` | all | warn |
 | `rename-table` | all | warn |
+| `recreate-cascade-data-loss` | sqlite | warn |
 | `truncate-in-migration` | postgres, mysql | warn |
 
 Full rationale and the safe rewrite per rule: [docs/rules.md](docs/rules.md). Postgres is first-class (statement-level analysis via the real Postgres parser, `libpg-query`); sqlite and mysql get the structural (snapshot-diff) rules and are considered experimental.

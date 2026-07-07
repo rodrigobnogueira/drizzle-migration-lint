@@ -1,0 +1,4 @@
+{
+  "legacy": { "findings": [{ "rule": "recreate-cascade-data-loss" }] },
+  "v1": { "findings": [{ "rule": "recreate-cascade-data-loss" }] }
+}

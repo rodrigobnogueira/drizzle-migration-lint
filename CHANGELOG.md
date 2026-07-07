@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — 2026-07-07
+
+- New rule **`recreate-cascade-data-loss`** (sqlite, warn): a SQLite table
+  recreate (drizzle-kit's `__new_` rebuild, triggered by an in-place-impossible
+  change like a column type change) whose parent has a child referencing it
+  `ON DELETE CASCADE` / `SET NULL` / `SET DEFAULT` silently loses child data on
+  **Cloudflare D1**, which ignores the `PRAGMA foreign_keys=OFF` guard drizzle-kit
+  emits around the rebuild (drizzle-team/drizzle-orm#4938). Standard SQLite and
+  libsql/Turso are protected by the guard — turn the rule `off` if you never
+  deploy to D1.
+- The normalized snapshot now captures foreign keys (referenced table +
+  `onDelete`, case-normalized) for both the legacy and v1 artifact formats.
+
 ## 0.3.0 — 2026-07-07
 
 - Opt-in live **table-size awareness**: `--db-url` reads on-disk table sizes
