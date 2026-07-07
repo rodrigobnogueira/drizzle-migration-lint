@@ -104,9 +104,14 @@ function resolvePrev(
   const tables = new Map<string, NormalizedTable>();
   for (const parent of parents) {
     for (const [identity, table] of parent.tables) {
-      const merged = tables.get(identity) ?? { ...table, columns: new Map(table.columns) };
+      const merged =
+        tables.get(identity) ??
+        ({ ...table, columns: new Map(table.columns), foreignKeys: new Map(table.foreignKeys) });
       for (const [colName, column] of table.columns) {
         merged.columns.set(colName, column);
+      }
+      for (const [fkName, fk] of table.foreignKeys) {
+        merged.foreignKeys.set(fkName, fk);
       }
       tables.set(identity, merged);
     }

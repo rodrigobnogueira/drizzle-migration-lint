@@ -11,6 +11,7 @@ import { setNotNull } from './pg/set-not-null';
 import { volatileDefaultOnAddColumn } from './pg/volatile-default-on-add-column';
 import { dropColumn } from './universal/drop-column';
 import { dropTable } from './universal/drop-table';
+import { recreateCascadeDataLoss } from './universal/recreate-cascade-data-loss';
 import { renameColumn } from './universal/rename-column';
 import { renameTable } from './universal/rename-table';
 import { truncateInMigration } from './universal/truncate-in-migration';
@@ -32,6 +33,7 @@ export const RULES: readonly Rule[] = [
   dropTable,
   renameColumn,
   renameTable,
+  recreateCascadeDataLoss,
   truncateInMigration,
 ];
 

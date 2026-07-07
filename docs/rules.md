@@ -132,6 +132,14 @@ Severity defaults: `error` fails the run (exit 1) under the default `--fail-on e
 
 **Safe sequence:** as [rename-column](#rename-column); a temporary updatable view with the old name can bridge the transition.
 
+## recreate-cascade-data-loss
+
+**Flags:** a SQLite table recreate (drizzle-kit's `CREATE __new_X` → `DROP TABLE X` → `RENAME` dance) whose parent has a child table referencing it with `ON DELETE CASCADE` / `SET NULL` / `SET DEFAULT` (sqlite, warn).
+
+**Why:** SQLite can't `ALTER` many things in place, so a change to a *parent* table rebuilds it — and `DROP TABLE` does an implicit row `DELETE` that fires the child's `ON DELETE` action, silently changing or deleting child rows (drizzle-team/drizzle-orm#4938). drizzle-kit wraps the rebuild in `PRAGMA foreign_keys=OFF; … =ON;`, which protects standard SQLite and libsql/Turso — **but Cloudflare D1 ignores `PRAGMA foreign_keys`**, so the cascade still fires there. This is primarily a D1 hazard; it has silently wiped data for many (e.g. better-auth upgrades). If the migration was hand-edited without the `PRAGMA` guard, the loss happens on *all* SQLite.
+
+**Safe alternative:** on Cloudflare D1, back up the affected child tables before applying (the `PRAGMA` workaround does not work there — see the issue). On standard SQLite/libsql the generated guard already protects the data, so if you never deploy to D1 you can turn this rule `off` in `.drizzle-migration-lint.json`.
+
 ## truncate-in-migration
 
 **Flags:** any `TRUNCATE` statement in a migration (postgres + mysql, warn).

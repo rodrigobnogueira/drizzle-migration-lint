@@ -221,3 +221,46 @@ test('legacy _meta column key without a dot degrades gracefully', () => {
   });
   assert.deepEqual(snapshot!.renames.columns, [{ table: '', from: 'loose', to: 'renamed' }]);
 });
+
+test('legacy snapshot captures foreign keys (onDelete lowercased; non-string → empty)', () => {
+  const snap = normalizeLegacySnapshot({
+    id: 'a',
+    prevId: ZERO_SNAPSHOT_ID,
+    tables: {
+      child: {
+        name: 'child',
+        schema: '',
+        columns: {},
+        foreignKeys: {
+          child_parent_fk: { name: 'child_parent_fk', tableTo: 'parent', onDelete: 'cascade' },
+          weird_fk: { name: 'weird_fk', tableTo: 'other', onDelete: 42 },
+          junk: { tableTo: 'x' },
+        },
+      },
+    },
+  });
+  const fks = snap!.tables.get('child')!.foreignKeys;
+  assert.equal(fks.get('child_parent_fk')!.onDelete, 'cascade');
+  assert.equal(fks.get('child_parent_fk')!.tableTo, 'parent');
+  assert.equal(fks.get('weird_fk')!.onDelete, '');
+  assert.equal(fks.size, 2); // the nameless `junk` entry is skipped
+});
+
+test('v1 snapshot captures fks entities (UPPERCASE onDelete lowercased; unknown from-table dropped)', () => {
+  const snap = normalizeV1Snapshot({
+    id: 'b',
+    prevIds: [ZERO_SNAPSHOT_ID],
+    dialect: 'sqlite',
+    ddl: [
+      { entityType: 'tables', name: 'parent' },
+      { entityType: 'tables', name: 'child' },
+      { entityType: 'fks', name: 'fk1', table: 'child', tableTo: 'parent', onDelete: 'CASCADE' },
+      { entityType: 'fks', name: 'fk2', table: 'child', tableTo: 'parent' },
+      { entityType: 'fks', name: 'orphan', table: 'ghost', tableTo: 'parent', onDelete: 'CASCADE' },
+    ],
+  });
+  const fks = snap!.tables.get('child')!.foreignKeys;
+  assert.equal(fks.get('fk1')!.onDelete, 'cascade');
+  assert.equal(fks.get('fk2')!.onDelete, ''); // missing onDelete → ''
+  assert.equal(fks.size, 2); // `orphan` (from-table not in snapshot) is dropped
+});

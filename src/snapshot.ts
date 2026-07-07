@@ -3,6 +3,7 @@ import type {
   ColumnRenamePair,
   Dialect,
   NormalizedColumn,
+  NormalizedForeignKey,
   NormalizedTable,
   RenameHints,
   RenamePair,
@@ -72,6 +73,23 @@ function legacyColumns(tableValue: Record<string, unknown>): Map<string, Normali
   return columns;
 }
 
+/** Legacy FKs: a `foreignKeys` object keyed by name; `onDelete` is lowercase. */
+function legacyForeignKeys(tableValue: Record<string, unknown>): Map<string, NormalizedForeignKey> {
+  const foreignKeys = new Map<string, NormalizedForeignKey>();
+  if (isRecord(tableValue.foreignKeys)) {
+    for (const value of Object.values(tableValue.foreignKeys)) {
+      if (isRecord(value) && typeof value.name === 'string' && typeof value.tableTo === 'string') {
+        foreignKeys.set(value.name, {
+          name: value.name,
+          tableTo: tableIdentity(null, value.tableTo),
+          onDelete: typeof value.onDelete === 'string' ? value.onDelete.toLowerCase() : '',
+        });
+      }
+    }
+  }
+  return foreignKeys;
+}
+
 /** `_meta: { tables: {from: to}, columns: {"tbl.from": "tbl.to"} }`. */
 function legacyRenameHints(raw: Record<string, unknown>): RenameHints {
   const meta = isRecord(raw._meta) ? raw._meta : {};
@@ -108,7 +126,13 @@ export function normalizeLegacySnapshot(raw: unknown): Snapshot | null {
       if (isRecord(value) && typeof value.name === 'string') {
         const schema = typeof value.schema === 'string' && value.schema !== '' ? value.schema : null;
         const identity = tableIdentity(schema, value.name);
-        tables.set(identity, { identity, name: value.name, schema, columns: legacyColumns(value) });
+        tables.set(identity, {
+          identity,
+          name: value.name,
+          schema,
+          columns: legacyColumns(value),
+          foreignKeys: legacyForeignKeys(value),
+        });
       }
     }
   }
@@ -124,10 +148,39 @@ function collectV1Tables(ddl: readonly unknown[]): Map<string, NormalizedTable> 
     if (isRecord(entity) && entity.entityType === 'tables' && typeof entity.name === 'string') {
       const schema = typeof entity.schema === 'string' ? entity.schema : null;
       const identity = tableIdentity(schema, entity.name);
-      tables.set(identity, { identity, name: entity.name, schema, columns: new Map() });
+      tables.set(identity, {
+        identity,
+        name: entity.name,
+        schema,
+        columns: new Map(),
+        foreignKeys: new Map(),
+      });
     }
   }
   return tables;
+}
+
+/** v1 FKs: flat `entityType: 'fks'` ddl entities; `onDelete` is uppercase. The
+ * `table`/`schema` fields name the FROM table; `tableTo`/`schemaTo` the target. */
+function attachV1ForeignKeys(ddl: readonly unknown[], tables: Map<string, NormalizedTable>): void {
+  for (const entity of ddl) {
+    if (
+      isRecord(entity) &&
+      entity.entityType === 'fks' &&
+      typeof entity.name === 'string' &&
+      typeof entity.table === 'string' &&
+      typeof entity.tableTo === 'string'
+    ) {
+      const schema = typeof entity.schema === 'string' ? entity.schema : null;
+      const schemaTo = typeof entity.schemaTo === 'string' ? entity.schemaTo : null;
+      const table = tables.get(tableIdentity(schema, entity.table));
+      table?.foreignKeys.set(entity.name, {
+        name: entity.name,
+        tableTo: tableIdentity(schemaTo, entity.tableTo),
+        onDelete: typeof entity.onDelete === 'string' ? entity.onDelete.toLowerCase() : '',
+      });
+    }
+  }
 }
 
 function attachV1Columns(ddl: readonly unknown[], tables: Map<string, NormalizedTable>): void {
@@ -152,6 +205,7 @@ export function normalizeV1Snapshot(raw: unknown): Snapshot | null {
   }
   const tables = collectV1Tables(raw.ddl);
   attachV1Columns(raw.ddl, tables);
+  attachV1ForeignKeys(raw.ddl, tables);
   const prevIds = Array.isArray(raw.prevIds)
     ? raw.prevIds.filter((id): id is string => typeof id === 'string')
     : [];

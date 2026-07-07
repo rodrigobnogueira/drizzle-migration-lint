@@ -33,6 +33,7 @@ export type RuleId =
   | 'drop-table'
   | 'rename-column'
   | 'rename-table'
+  | 'recreate-cascade-data-loss'
   | 'truncate-in-migration';
 
 export interface SqlStatement {
@@ -85,12 +86,23 @@ export interface NormalizedColumn {
   type: string | null;
 }
 
+export interface NormalizedForeignKey {
+  name: string;
+  /** Normalized identity of the referenced table (this FK's parent). */
+  tableTo: string;
+  /** `onDelete` action, lowercased (`cascade`, `set null`, `no action`, ...) —
+   * legacy snapshots store it lowercase, v1 uppercase, so it is normalized. */
+  onDelete: string;
+}
+
 export interface NormalizedTable {
   /** `table` or `schema.table` for non-default pg schemas. */
   identity: string;
   name: string;
   schema: string | null;
   columns: Map<string, NormalizedColumn>;
+  /** Foreign keys declared on this table, keyed by constraint name. */
+  foreignKeys: Map<string, NormalizedForeignKey>;
 }
 
 export interface RenamePair {

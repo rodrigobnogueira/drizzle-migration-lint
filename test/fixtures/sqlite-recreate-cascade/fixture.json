@@ -1,0 +1,8 @@
+{
+  "mode": "generated",
+  "dialect": "sqlite",
+  "steps": [
+    { "name": "init", "schema": "schema.step0.ts" },
+    { "name": "retype_code", "schema": "schema.step1.ts" }
+  ]
+}

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { NormalizedTable, RenameHints, Snapshot } from '../../src/types';
+import type { NormalizedForeignKey, NormalizedTable, RenameHints, Snapshot } from '../../src/types';
 
 /** Creates a throwaway directory populated from a `path → content` map and
  * returns it with a cleanup function. */
@@ -62,16 +62,27 @@ function splitIdentity(identity: string): { schema: string | null; name: string 
 export function makeSnapshot(
   id: string,
   tables: Record<string, string[]>,
-  opts: { prevIds?: string[]; renames?: RenameHints } = {},
+  opts: {
+    prevIds?: string[];
+    renames?: RenameHints;
+    /** per-table foreign keys, keyed by the owning table's identity */
+    foreignKeys?: Record<string, { tableTo: string; onDelete: string; name?: string }[]>;
+  } = {},
 ): Snapshot {
   const map = new Map<string, NormalizedTable>();
   for (const [identity, cols] of Object.entries(tables)) {
     const { schema, name } = splitIdentity(identity);
+    const fks = new Map<string, NormalizedForeignKey>();
+    (opts.foreignKeys?.[identity] ?? []).forEach((fk, index) => {
+      const fkName = fk.name ?? `${name}_fk_${index}`;
+      fks.set(fkName, { name: fkName, tableTo: fk.tableTo, onDelete: fk.onDelete });
+    });
     map.set(identity, {
       identity,
       name,
       schema,
       columns: new Map(cols.map((col) => [col, { name: col, notNull: false, type: null }] as const)),
+      foreignKeys: fks,
     });
   }
   return {

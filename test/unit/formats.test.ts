@@ -257,6 +257,38 @@ test('v1: merge commit (two parents) → prevSnapshot is the union of parent tab
   }
 });
 
+test('v1: merge preserves foreign keys across the parent union', () => {
+  const parentB = JSON.stringify({
+    version: '8',
+    dialect: 'postgres',
+    id: 'idb',
+    prevIds: [ZERO],
+    ddl: [
+      { entityType: 'tables', name: 'users', schema: 'public' },
+      { entityType: 'tables', name: 'child', schema: 'public' },
+      { entityType: 'fks', name: 'child_users_fk', table: 'child', tableTo: 'users', onDelete: 'CASCADE', schema: 'public', schemaTo: 'public' },
+    ],
+    renames: [],
+  });
+  const { dir, cleanup } = tempTree({
+    '20240101000000_a/migration.sql': 'SELECT 1;',
+    '20240101000000_a/snapshot.json': v1SnapshotJson('ida', [ZERO], ['users']),
+    '20240102000000_b/migration.sql': 'SELECT 2;',
+    '20240102000000_b/snapshot.json': parentB,
+    '20240103000000_merge/migration.sql': 'SELECT 3;',
+    '20240103000000_merge/snapshot.json': v1SnapshotJson('idm', ['ida', 'idb'], ['users', 'child']),
+  });
+  try {
+    const set = readMigrationSet(dir);
+    const merge = set.migrations.find((m) => m.id.endsWith('_merge'))!;
+    const childFks = merge.prevSnapshot!.tables.get('child')!.foreignKeys;
+    assert.equal(childFks.get('child_users_fk')!.onDelete, 'cascade');
+    assert.equal(childFks.get('child_users_fk')!.tableTo, 'users');
+  } finally {
+    cleanup();
+  }
+});
+
 test('v1: merge unions parent columns for the surviving table', () => {
   const withCol = (id: string, prev: string, table: string, col: string) =>
     JSON.stringify({

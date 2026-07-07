@@ -1,0 +1,92 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "00000000-0000-4000-8000-000000000001",
+  "prevIds": [
+    "00000000-0000-4000-8000-000000000000"
+  ],
+  "ddl": [
+    {
+      "name": "child",
+      "entityType": "tables"
+    },
+    {
+      "name": "parent",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "child"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "parent_id",
+      "entityType": "columns",
+      "table": "child"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "parent"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "code",
+      "entityType": "columns",
+      "table": "parent"
+    },
+    {
+      "columns": [
+        "parent_id"
+      ],
+      "tableTo": "parent",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_child_parent_id_parent_id_fk",
+      "entityType": "fks",
+      "table": "child"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "child_pk",
+      "table": "child",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "parent_pk",
+      "table": "parent",
+      "entityType": "pks"
+    }
+  ],
+  "renames": []
+}
