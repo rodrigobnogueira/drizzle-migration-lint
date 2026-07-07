@@ -25,6 +25,7 @@ export const addCheckWithoutNotValid: Rule = {
           line,
           `Adding a CHECK constraint to "${table}" without NOT VALID scans the whole table under a lock.`,
           SUGGESTION,
+          { table },
         ),
       );
     }

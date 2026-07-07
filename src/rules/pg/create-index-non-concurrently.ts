@@ -29,6 +29,7 @@ export const createIndexNonConcurrently: Rule = {
           statement.line,
           `Creating an index on "${table}" without CONCURRENTLY blocks all writes to the table for the entire build.`,
           SUGGESTION,
+          { table },
         ),
       );
     }

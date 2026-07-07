@@ -10,9 +10,10 @@ The imported guidelines are the binding project constitution. Always-on rules:
 - **`libpg-query` is the ONLY runtime dependency**, lazy-loaded for Postgres.
   Do not add a second one. The CLI stays zero-dependency (`node:util`
   `parseArgs`).
-- **The tool is READ-ONLY.** Never run a user's migrations, import their
-  `drizzle.config` (it is regex-scanned, never executed), or connect to a
-  database.
+- **The tool is READ-ONLY and offline by default.** Never run a user's
+  migrations or import their `drizzle.config` (it is regex-scanned, never
+  executed). The only database access is opt-in `--db-url` size introspection —
+  a single read-only query the user explicitly enables; never connect otherwise.
 - **Fixtures are deterministic.** After any change to parsing, the differ, or a
   rule, run `npm run fixtures:regen` and confirm `git diff --exit-code
   test/fixtures` is clean. Never hand-edit a generated fixture — change its

@@ -53,6 +53,9 @@ export interface Finding {
   /** Migration id (legacy: journal tag; v1: folder name). */
   migration: string;
   suppressed: boolean;
+  /** Normalized identity of the table the finding concerns, when it concerns a
+   * single one — used to match findings to live table sizes for size-exemption. */
+  table?: string;
   docsUrl: string;
 }
 
@@ -67,6 +70,7 @@ export interface Diagnostic {
     | 'unknown-snapshot-version'
     | 'pg-parser-unavailable'
     | 'pg-statements-unparsed'
+    | 'introspection-failed'
     | 'baseline-stale';
   message: string;
   migration?: string;

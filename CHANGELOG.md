@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-07-07
+
+- Opt-in live **table-size awareness**: `--db-url` reads on-disk table sizes
+  from a live Postgres (read-only, one query) and suppresses the eight
+  lock/rewrite rules on tables at or below `--size-threshold` (default `16MB`) —
+  the lock is too brief to matter. Off by default; requires `pg` (an optional
+  peer, `npm i pg`). Data-loss and rolling-deploy findings (drops, renames,
+  truncate, `NOT NULL` without default) are never size-exempted. Configure via
+  `introspect` in the config file. Suppressed findings stay visible with the
+  table size noted.
+- Findings now carry the affected `table` (surfaced in `json`/`sarif` output).
+
 ## 0.2.0 — 2026-07-06
 
 - New Postgres rules: `add-unique-constraint` (a `UNIQUE` constraint builds its

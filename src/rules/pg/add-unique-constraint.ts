@@ -25,6 +25,7 @@ export const addUniqueConstraint: Rule = {
           line,
           `Adding a UNIQUE constraint to "${table}" builds its unique index under ACCESS EXCLUSIVE for the whole build.`,
           SUGGESTION,
+          { table },
         ),
       );
     }

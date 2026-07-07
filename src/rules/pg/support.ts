@@ -8,24 +8,26 @@ export function pgTableIdentity(relation: RangeVar | undefined): string {
 }
 
 /** Builds a finding on the current statement's line. Defaults to `error` (the
- * lock/rewrite rules); pass `warn` for advisory rules like add-enum-value. */
+ * lock/rewrite rules); pass `severity: 'warn'` for advisory rules. `table` is
+ * the affected table's identity, so size-exemption can match it to a live size. */
 export function pgFinding(
   ctx: RuleContext,
   id: RuleId,
   line: number,
   message: string,
   suggestion: string,
-  severity: Severity = 'error',
+  opts: { severity?: Severity; table?: string } = {},
 ): Finding {
   return {
     rule: id,
-    severity,
+    severity: opts.severity ?? 'error',
     message,
     suggestion,
     file: ctx.migration.sqlPath,
     line,
     migration: ctx.migration.id,
     suppressed: false,
+    table: opts.table,
     docsUrl: docsUrlFor(id),
   };
 }

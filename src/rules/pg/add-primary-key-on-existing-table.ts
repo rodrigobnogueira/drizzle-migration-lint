@@ -25,6 +25,7 @@ export const addPrimaryKeyOnExistingTable: Rule = {
           line,
           `Adding a PRIMARY KEY to "${table}" builds its unique index under ACCESS EXCLUSIVE for the whole build.`,
           SUGGESTION,
+          { table },
         ),
       );
     }

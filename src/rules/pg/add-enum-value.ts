@@ -40,7 +40,7 @@ export const addEnumValue: Rule = {
           statement.line,
           `Adding a value to enum "${enumIdentity(node)}" runs inside drizzle's per-migration transaction, where ADD VALUE is restricted.`,
           SUGGESTION,
-          'warn',
+          { severity: 'warn' },
         ),
       );
     }

@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { runBaseline } from './baseline';
+import { parseSize } from './bytes';
 import { loadConfig, resolveLocation, type DmlConfig } from './config';
 import { lint } from './engine';
 import { UsageError } from './errors';
 import { explainRule } from './explain';
+import { introspectTableSizes } from './introspect';
 import { EXIT_CLEAN, EXIT_USAGE, computeExitCode, type FailOn } from './exit-code';
 import { readMigrationSet } from './formats';
 import { REPORTERS, defaultReporter, isReporterName, type ReporterName } from './reporters';
 import { resolveScope } from './scope';
 import { normalizeDialect } from './snapshot';
-import type { Dialect, MigrationSet } from './types';
+import type { Diagnostic, Dialect, MigrationSet } from './types';
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -39,6 +41,9 @@ Options:
   --config <path>    path to .drizzle-migration-lint.json
   --format <name>    pretty | json | github | sarif (default: github under $GITHUB_ACTIONS, else pretty)
   --fail-on <level>  error | warn | none (default: error)
+  --db-url <url>     opt-in: read live Postgres table sizes; lock/rewrite findings
+                     on tables at or below --size-threshold are suppressed (needs the pg package)
+  --size-threshold <n>  size below which locks are treated as negligible (default 16MB)
   -h, --help         show this help
   -v, --version      print the version
 
@@ -55,6 +60,8 @@ interface ParsedCli {
   config: string | undefined;
   format: ReporterName | undefined;
   failOn: FailOn;
+  dbUrl: string | undefined;
+  sizeThreshold: string | undefined;
   help: boolean;
   version: boolean;
 }
@@ -101,6 +108,8 @@ function parseCliArgs(argv: string[]): ParsedCli {
         config: { type: 'string' },
         format: { type: 'string' },
         'fail-on': { type: 'string', default: 'error' },
+        'db-url': { type: 'string' },
+        'size-threshold': { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -129,6 +138,8 @@ function parseCliArgs(argv: string[]): ParsedCli {
     config: values.config,
     format: parseFormat(values.format),
     failOn: parseFailOn(values['fail-on'] as string),
+    dbUrl: values['db-url'],
+    sizeThreshold: values['size-threshold'],
     help: values.help === true,
     version: values.version === true,
   };
@@ -146,13 +157,45 @@ function loadSet(io: CliIo, cli: ParsedCli, config: DmlConfig): MigrationSet {
   return readMigrationSet(location.dir, { dialect: location.dialect });
 }
 
+/** Opt-in live table sizes (Postgres only). Returns the size map (or records a
+ * diagnostic and returns undefined) plus the resolved byte threshold. */
+async function resolveTableSizes(
+  set: MigrationSet,
+  cli: ParsedCli,
+  config: DmlConfig,
+  diagnostics: Diagnostic[],
+): Promise<{ sizes: Map<string, number> | undefined; threshold: number | undefined }> {
+  const rawThreshold = cli.sizeThreshold ?? config.introspect?.threshold;
+  const threshold = rawThreshold === undefined ? undefined : parseSize(String(rawThreshold));
+  const url = cli.dbUrl ?? config.introspect?.url;
+  if (url === undefined || set.dialect !== 'postgresql') {
+    return { sizes: undefined, threshold };
+  }
+  const result = await introspectTableSizes(url);
+  if ('error' in result) {
+    diagnostics.push({
+      code: 'introspection-failed',
+      message: `could not read live table sizes: ${result.error} — size-exemption skipped`,
+    });
+    return { sizes: undefined, threshold };
+  }
+  /* c8 ignore start -- the success path needs a live Postgres; exercised by the
+     introspect unit tests (injected connector) and post-release validation */
+  return { sizes: result.sizes, threshold };
+}
+/* c8 ignore stop */
+
 async function runCheck(io: CliIo, cli: ParsedCli, config: DmlConfig): Promise<number> {
   const set = loadSet(io, cli, config);
   const scope = resolveScope(set, { since: cli.since, all: cli.all, baseline: config.baseline });
+  const diagnostics = [...scope.diagnostics];
+  const { sizes, threshold } = await resolveTableSizes(set, cli, config, diagnostics);
   const result = await lint(set, {
     severityOverrides: config.rules,
     inScope: scope.inScope,
-    extraDiagnostics: scope.diagnostics,
+    extraDiagnostics: diagnostics,
+    tableSizes: sizes,
+    sizeThreshold: threshold,
   });
   const format = cli.format ?? defaultReporter(io.env);
   io.stdout(REPORTERS[format](result));

@@ -1,6 +1,6 @@
 {
   "name": "drizzle-migration-lint",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Catch drizzle-kit migrations that will lock or rewrite your production tables",
   "license": "MIT",
   "author": "Rodrigo Nogueira",
@@ -61,5 +61,13 @@
   "packageManager": "npm@11.13.0",
   "dependencies": {
     "libpg-query": "^17.7.3"
+  },
+  "peerDependencies": {
+    "pg": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
   }
 }
