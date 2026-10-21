@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Node 20 is no longer supported: it reached end-of-life on 2026-04-30 and did
+  not receive the 2026-10-21 Node.js security releases. `engines.node` is now
+  `>=22`; CI tests Node 22 and 24.
+
 ## 0.4.0 — 2026-07-07
 
 - New rule **`recreate-cascade-data-loss`** (sqlite, warn): a SQLite table
