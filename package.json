@@ -42,7 +42,7 @@
     "test:mutant": "TS_NODE_PROJECT=tsconfig.spec.json node --require ts-node/register --test --test-force-exit test/unit/*.test.ts test/*.test.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"
