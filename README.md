@@ -52,10 +52,10 @@ Exit codes: `0` clean (or below `--fail-on` level), `1` findings, `2` usage/envi
 Use the GitHub Action — one step, inline PR annotations plus a job-summary table:
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@v7
   with:
     fetch-depth: 0            # --since needs history
-- uses: rodrigobnogueira/drizzle-migration-lint@v0.2.0
+- uses: rodrigobnogueira/drizzle-migration-lint@v0.5.0
   with:
     since: origin/${{ github.base_ref }}   # lint only what the PR adds
     fail-on: warn

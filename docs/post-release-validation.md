@@ -26,7 +26,7 @@ cannot prove three things that only matter in production:
 ## Prerequisites
 
 - Docker (a throwaway container — nothing touches your real databases).
-- Node ≥ 20.
+- Node ≥ 22.
 - The version under test, e.g. `VER=0.1.1`.
 
 ## 0. Throwaway Postgres
