@@ -131,9 +131,12 @@ non-adversarial. Never imply affiliation with the Drizzle team.
   provenance requires GitHub Actions OIDC and cannot be produced locally.
 - Update `CHANGELOG.md` per release; `test:cov` must be green (the release
   workflow re-runs it before publishing).
-- The `NPM_TOKEN` secret must be a token that can publish *this* package. A
-  first publish of a new package needs a create-capable token — one scoped only
-  to pre-existing packages will `E403` on the initial `PUT`.
+- Publishing uses npm **trusted publishing**: no npm token is stored in the
+  repository. The package's Trusted Publisher on npmjs.com names this
+  repository and `release.yml`, with no environment; renaming the workflow
+  file breaks publishing until that setting is updated. Trusted publishing
+  needs npm 11.5.1 or newer, so the workflow installs a current npm before
+  publishing.
 
 ## 9. When in doubt
 
