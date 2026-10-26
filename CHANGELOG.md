@@ -1,10 +1,12 @@
 # Changelog
 
-## 0.5.0 — 2026-10-22
+## 0.5.0 — 2026-10-25
 
 - Node 20 is no longer supported: it reached end-of-life on 2026-04-30 and did
   not receive the 2026-10-21 Node.js security releases. `engines.node` is now
   `>=22`; CI tests Node 22 and 24.
+- Releases are published through npm trusted publishing, with provenance as
+  before. The repository no longer holds an npm token.
 
 ## 0.4.0 — 2026-07-07
 

@@ -1,5 +1,12 @@
 name: Release
 
+# Publishes on a `vX.Y.Z` tag through npm TRUSTED PUBLISHING (OIDC): no
+# long-lived npm token is stored in this repository. The `id-token: write`
+# permission lets the npm CLI exchange the workflow's OIDC token for a
+# short-lived publish credential, and `--provenance` attaches the build
+# attestation. The package's Trusted Publisher on npmjs.com must point at
+# this repository (`rodrigobnogueira/drizzle-migration-lint`) and this file
+# (`release.yml`), with no environment.
 on:
   push:
     tags:
@@ -19,10 +26,11 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm 11.5.1 or newer; Node 22 bundles npm 10.
+      - name: Ensure an OIDC-capable npm
+        run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm run test:cov
-      - name: Publish to npm (with provenance)
+      - name: Publish to npm (trusted publishing, with provenance)
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
