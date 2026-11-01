@@ -61,7 +61,7 @@
   "overrides": {
     "qs": "^6.15.2"
   },
-  "packageManager": "npm@11.13.0",
+  "packageManager": "npm@11.21.1",
   "dependencies": {
     "libpg-query": "^17.7.3"
   },
